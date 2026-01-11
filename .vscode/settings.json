@@ -1,0 +1,80 @@
+{
+    // ------------------------------------------------------------------------------
+    // FILE:        .vscode/settings.json
+    // VERSION:     1.3.0
+    // DESCRIPTION: VS Code Workspace-Einstellungen für das Dotfiles-Framework.
+    // ------------------------------------------------------------------------------
+
+    "files.encoding": "utf8",
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "files.autoSave": "off",
+    "files.autoSaveDelay": 1000,
+
+   "files.associations": {
+        ".bash*": "shellscript",
+        "*.sh": "shellscript",
+        ".shellcheckrc": "properties",
+        ".editorconfig": "properties",
+        ".gitattributes": "properties",
+        ".gitignore": "ignore",
+        ".nanorc": "properties",
+        ".dircolors": "properties",
+        "*.jsonc": "jsonc"
+    },
+
+    // --- SPRACHSPEZIFISCHE KONFIGURATIONEN ------------------------------------
+
+    "[shellscript]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.defaultFormatter": "mads-hartmann.bash-ide-vscode",
+        "editor.formatOnSave": true
+    },
+
+    "[powershell]": {
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "editor.defaultFormatter": "ms-vscode.powershell",
+        "editor.formatOnSave": true
+    },
+
+    "[latex]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true,
+        "editor.defaultFormatter": "James-Yu.latex-workshop",
+        "editor.formatOnSave": true
+    },
+
+    "[markdown]": {
+        "editor.wordWrap": "on",
+        "files.trimTrailingWhitespace": false,
+        "editor.defaultFormatter": "yzhang.markdown-all-in-one",
+        "editor.formatOnSave": true
+    },
+
+    // --- TOOL & EXTENSION EINSTELLUNGEN ---------------------------------------
+
+    "shellcheck.run": "onSave",
+    "shellcheck.useWorkspaceRootAsWorkdir": true,
+    "editor.stickyScroll.enabled": true,
+
+    "latex-workshop.view.pdf.viewer": "tab",
+    "latex-workshop.latex.recipe.default": "latexmk",
+    "latex-workshop.latex.autoClean.run": "onBuilt",
+
+    // --- RECHTSCHREIBPRÜFUNG (PROJECT DICTIONARY) -----------------------------
+
+    "cSpell.enabled": true,
+    "cSpell.language": "en,de",
+    "cSpell.dictionaries": ["project-words"],
+    "cSpell.customDictionaries": {
+        "project-words": {
+            "name": "project-words",
+            "path": "${workspaceFolder}/.vscode/project-words.txt",
+            "addWords": true,
+            "scope": "workspace"
+        }
+    }
+}

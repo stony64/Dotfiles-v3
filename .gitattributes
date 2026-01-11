@@ -1,0 +1,56 @@
+# ------------------------------------------------------------------------------
+# FILE:        .gitattributes
+# VERSION:     1.2.4
+# DESCRIPTION: Erzwingung korrekter Zeilenenden (LF) und Binär-Handling.
+# ------------------------------------------------------------------------------
+
+# --- 1. GLOBALER STANDARD -----------------------------------------------------
+# Automatische Texterkennung für alle Dateien als Fallback.
+* text=auto
+# --- 2. SHELL-SKRIPTE & DOTFILES (ERZWINGE LF) --------------------------------
+*.sh             text eol=lf
+.bash*           text eol=lf
+.dircolors       text eol=lf
+.nanorc          text eol=lf
+# Falls Dateien ohne Punkt im Repo sind (z.B. in Templates):
+# bashrc           text eol=lf
+# bashaliases      text eol=lf
+
+# --- 3. KONFIGURATION & DATA (ERZWINGE LF) ------------------------------------
+*.json           text eol=lf
+*.jsonc          text eol=lf
+*.yml            text eol=lf
+*.yaml           text eol=lf
+*.toml           text eol=lf
+*.conf           text eol=lf
+*.ini            text eol=lf
+.editorconfig    text eol=lf
+.gitignore       text eol=lf
+.gitattributes   text eol=lf
+.shellcheckrc    text eol=lf
+# Erfasst .markdownlint.jsonc UND markdownlint-cli2.jsonc
+*markdownlint* text eol=lf
+
+# --- 4. DOKUMENTATION & PROJEKT-DATEIEN (ERZWINGE LF) -------------------------
+*.md              text eol=lf
+*.txt             text eol=lf
+project-words.txt text eol=lf
+LICENSE           text eol=lf
+README            text eol=lf
+
+# --- 5. BINÄRDATEIEN (KEINE TRANSFORMATION) ----------------------------------
+*.png             binary
+*.jpg             binary
+*.jpeg            binary
+*.gif             binary
+*.ico             binary
+*.webp            binary
+*.pdf             binary
+*.zip             binary
+*.7z              binary
+*.gz              binary
+*.tgz             binary
+
+# --- 6. WINDOWS-SPEZIFISCHE DATEIEN (ERZWINGE CRLF) ---------------------------
+*.bat             text eol=crlf
+*.ps1             text eol=crlf

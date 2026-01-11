@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# ------------------------------------------------------------------------------
+# FILE:         .bashfunctions
+# VERSION:      1.5.3
+# DESCRIPTION:  Benutzerdefinierte Bash-Funktionen mit SC2015/SC2142 Fixes.
+# ------------------------------------------------------------------------------
+
+# --- 0. INITIALISIERUNG & BOOTSTRAP -------------------------------------------
+
+# ZWECK: Sicherstellen, dass Logging-Funktionen vorhanden sind (Fallback).
+if ! command -v df_log_error >/dev/null 2>&1; then
+    df_log_error()   { printf '\033[31m[ERR]\033[0m %s\n' "$*"; }
+    df_log_success() { printf '\033[32m[OK]\033[0m %s\n' "$*"; }
+    df_log_info()    { printf '\033[34m-->\033[0m %s\n' "$*"; }
+fi
+
+# --- 1. ARCHIVIERUNG / PACKEN -------------------------------------------------
+
+# ZWECK: Komprimiert ein Verzeichnis oder eine Datei als .tar.gz.
+df_compress() {
+    local name="$1"
+    local source="$2"
+    local target="${name}.tar.gz"
+
+    if [[ -z "$name" || -z "$source" ]]; then
+        df_log_error "Verwendung: df_compress <zielname_ohne_endung> <quelle>"
+        return 1
+    fi
+
+    if tar -cvzf "$target" -- "$source"; then
+        df_log_success "Archiv erstellt: $target"
+    else
+        df_log_error "Fehler beim Erstellen des Archivs."
+        return 1
+    fi
+}
+
+# ZWECK: Intelligentes Entpacken verschiedenster Archivformate (Fix: SC2015).
+extract() {
+    local file="$1"
+    local success=0
+
+    [[ -z "$file" ]] && { df_log_error "Verwendung: extract <archivdatei>"; return 1; }
+    [[ ! -f "$file" ]] && { df_log_error "Fehler: Datei '$file' nicht gefunden."; return 1; }
+
+    case "${file,,}" in
+        *.tar.bz2|*.tar.gz|*.tgz|*.tar.xz|*.txz|*.tar|*.tar.zst)
+            tar xf "$file" && success=1 ;;
+        *.zip)
+            unzip "$file" && success=1 ;;
+        *.7z)
+            if command -v 7z >/dev/null 2>&1; then
+                7z x "$file" && success=1
+            else
+                df_log_error "Fehler: '7z' ist nicht installiert."
+                return 1
+            fi
+            ;;
+        *.rar)
+            if command -v unrar >/dev/null 2>&1; then
+                unrar x "$file" && success=1
+            else
+                df_log_error "Fehler: 'unrar' ist nicht installiert."
+                return 1
+            fi
+            ;;
+        *.gz)   gunzip "$file"  && success=1 ;;
+        *.bz2)  bunzip2 "$file" && success=1 ;;
+        *.xz)   unxz "$file"    && success=1 ;;
+        *)      df_log_error "Fehler: Unbekanntes Format: $file"; return 1 ;;
+    esac
+
+    if [[ $success -eq 1 ]]; then
+        df_log_success "Erfolgreich entpackt: $file"
+        return 0
+    else
+        df_log_error "Fehler beim Entpacken von: $file"
+        return 1
+    fi
+}
+
+# --- 2. SUCHE & INFORMATION ---------------------------------------------------
+
+# ZWECK: Sucht case-insensitive in der Bash-History.
+hg() {
+    [[ -z "$1" ]] && { df_log_error "Verwendung: hg <suchbegriff>"; return 1; }
+    history | grep -i -- "$1"
+}
+
+# ZWECK: Rekursive Dateisuche (case-insensitive).
+ff() {
+    [[ -z "$1" ]] && { df_log_error "Verwendung: ff <dateiname>"; return 1; }
+    find . -iname "*$1*" 2>/dev/null
+}
+
+# ZWECK: Sucht nach Text innerhalb von Dateien (exkl. .git/node_modules).
+ft() {
+    local term="$1"
+    local mask="${2:-*}"
+    [[ -z "$term" ]] && { df_log_error "Verwendung: ft <suchbegriff> [maske]"; return 1; }
+    grep -rniI --exclude-dir={.git,node_modules} --include="$mask" -- "$term" .
+}
+
+# ZWECK: Zeigt Aliase tabellarisch an.
+show_aliases() {
+    df_log_info "Definierte Aliasse:"
+    alias | sed 's/^alias //' | column -t -s'=' | sed 's/^/  /'
+}
+
+# ZWECK: Listet benutzerdefinierte Funktionen auf.
+show_functions() {
+    df_log_info "Definierte Funktionen:"
+    declare -F | awk '{print $3}' | grep -v '^_' | sort | column | sed 's/^/  /'
+}
+
+# --- 3. NAVIGATION & STRUKTUR -------------------------------------------------
+
+# ZWECK: Erstellt Verzeichnisse und wechselt hinein.
+mkd() {
+    [[ -z "$1" ]] && { df_log_error "Verwendung: mkd <pfad>"; return 1; }
+    mkdir -p -- "$1" && cd -- "$1" || return 1
+}
+
+# ZWECK: Zeigt Verzeichnisstruktur (tree-alias).
+lt() {
+    local target="${1:-.}"
+    [[ ! -d "$target" ]] && { df_log_error "Kein Verzeichnis: $target"; return 1; }
+    if command -v tree >/dev/null; then
+        tree -aC -I '.git|node_modules|.DS_Store' --dirsfirst "$target" | less -RFE
+    else
+        df_log_info "Tree fehlt. Nutze find-Fallback:"
+        find "$target" -maxdepth 2 -not -path '*/.*'
+    fi
+}
+
+# ZWECK: Schneller Wechsel in Dotfiles-Root.
+cdd() { cd "${DF_REPO_ROOT:-/opt/dotfiles}" || return 1; }
+
+# ZWECK: Zeigt Größen im aktuellen Verzeichnis sortiert an.
+fsize() { du -sh ./* 2>/dev/null | sort -h; }
+
+# --- 4. SYSTEM, NETZWERK & WARTUNG --------------------------------------------
+
+# ZWECK: Zeigt die Top-10 Prozesse nach Speicherverbrauch.
+df_mem_top() {
+    df_log_info "Top 10 Speicherverbraucher:"
+    ps auxf | sort -nr -k 4 | head -10
+}
+
+# ZWECK: Umfassende IP-Analyse (Lokal IPv4/IPv6 & Öffentlich via Fallback).
+df_myip() {
+    # 1. Lokale IPv4
+    local local_ipv4 ipv6_list pub_ip
+    local_ipv4=$(hostname -I | awk '{print $1}' 2>/dev/null || true)
+    [[ -n "$local_ipv4" ]] && df_log_info "Lokal IPv4: $local_ipv4"
+
+    # 2. Lokale IPv6 (Linux Only Filter)
+    if [[ "$(uname -s)" == *"Linux"* ]] && command -v ip >/dev/null 2>&1; then
+        ipv6_list=$(ip -6 addr show 2>/dev/null | grep -oP '(?<=inet6\s)[0-9a-f:]+' | grep -vE '^(::1|fe80)' || true)
+        while read -r line; do [[ -n "$line" ]] && df_log_info "Lokal IPv6: $line"; done <<< "$ipv6_list"
+    fi
+
+    # 3. Öffentliche IPv4
+    local services=("https://api.ipify.org" "https://ifconfig.me" "https://icanhazip.com")
+    for url in "${services[@]}"; do
+        pub_ip=$(curl -s --connect-timeout 2 "$url" 2>/dev/null | tr -d '[:space:]')
+        if [[ -n "$pub_ip" ]]; then
+            df_log_success "Public IP: $pub_ip"
+            return 0
+        fi
+    done
+
+    df_log_error "Öffentliche IP konnte nicht ermittelt werden."
+    return 1
+}
+
+# ZWECK: Prüft, welcher Dienst auf einem Port lauscht.
+port() {
+    [[ -z "$1" ]] && { df_log_error "Verwendung: port <nummer>"; return 1; }
+    ss -tulpn | grep ":$1"
+}
+
+# ZWECK: Löscht verwaiste Symlinks im aktuellen Verzeichnis.
+df_clean_links() {
+    df_log_info "Suche nach toten Symlinks..."
+    find . -xtype l -delete -print | sed 's/^/  Entfernt: /'
+}

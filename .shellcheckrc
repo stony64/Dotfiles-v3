@@ -1,0 +1,38 @@
+# ------------------------------------------------------------------------------
+# FILE:         .shellcheckrc
+# VERSION:      1.2.5
+# DESCRIPTION:  Konfiguration für die statische Code-Analyse (ShellCheck).
+# ------------------------------------------------------------------------------
+
+# --- 1. BASISEINSTELLUNGEN ----------------------------------------------------
+shell=bash
+minimum-bash-version=4.0
+
+# --- 2. SOURCING & PFAD-LOGIK (MODULARES FRAMEWORK) ---------------------------
+source-path=SCRIPTDIR
+source-path=.
+
+# SC1090/1091: Dynamisches Sourcing ist Kern deines Frameworks
+disable=SC1090
+disable=SC1091
+
+# SC2148: Erlaubt Sourced-Module ohne Shebang
+disable=SC2148
+
+# --- 3. GLOBALE VARIABLEN & AUSNAHMEN -----------------------------------------
+
+# SC2154: Verhindert "Variable is referenced but not assigned"
+# Hier registrieren wir alle Variablen, die Framework-weit zur Verfügung stehen.
+allowed-undefined-vars=DF_PROJECT_VERSION,DF_REPO_ROOT,DF_C_RED,DF_C_GREEN,DF_C_BLUE,DF_C_CYAN,DF_C_RESET,DF_SYM_OK,DF_SYM_ERR
+
+# SC2034: "Variable erscheint unbenutzt" (Unterdrückt Warnungen in core.sh)
+disable=SC2034
+
+# --- 4. STRICT MODE (QUALITÄTSSICHERUNG) --------------------------------------
+enable=quote-safe-variables
+enable=check-unassigned-uppercase
+enable=check-set-e-suppressed
+enable=check-indirect-interactive-source
+
+# --- 5. AUSGABE-FORMATIERUNG --------------------------------------------------
+color=always

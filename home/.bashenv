@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# ------------------------------------------------------------------------------
+# FILE:         .bashenv
+# VERSION:      1.4.7
+# DESCRIPTION:  Zentrale Umgebungsvariablen und Shell-Optionen.
+# ------------------------------------------------------------------------------
+
+# --- EDITOR & HISTORY ---------------------------------------------------------
+# Kompakter Check für den verfügbaren Editor (Priorität: micro > nano > vi)
+for cmd in micro nano vi; do
+    if command -v "$cmd" >/dev/null 2>&1; then
+        export EDITOR="$cmd"
+        break
+    fi
+done
+
+export HISTTIMEFORMAT="%F %T "
+export HISTCONTROL="ignoreboth:erasedups"
+export HISTIGNORE="&:[ ]*:la:ll:lah:lat:ls:cd:cd ..:..:-:pwd:exit:clear:mc:au:fg:bg:jobs:history:df:du"
+export HISTSIZE=10000
+export HISTFILESIZE=100000
+
+shopt -s histappend cmdhist cdspell checkwinsize globstar
+
+# Performance-Optimierung: Nur schreiben, nicht bei jedem Prompt neu lesen (kein history -r)
+export PROMPT_COMMAND="history -a; ${PROMPT_COMMAND:-}"
+
+# --- UI (LESS & COLORS) -------------------------------------------------------
+if [[ "$TERM" != "dumb" ]] && command -v tput >/dev/null 2>&1; then
+    export MANPAGER="less -s -M +Gg"
+    export LESS_TERMCAP_mb=$(tput setaf 1)
+    export LESS_TERMCAP_md=$(tput setaf 3)
+    export LESS_TERMCAP_me=$(tput sgr0)
+    export LESS_TERMCAP_se=$(tput sgr0)
+    export LESS_TERMCAP_so=$(tput setab 4; tput setaf 3)
+    export LESS_TERMCAP_ue=$(tput sgr0)
+    export LESS_TERMCAP_us=$(tput setaf 2)
+fi
+
+# --- LOCALES ------------------------------------------------------------------
+# Nutzt Deutsch nur, wenn wir auf Linux sind UND das Sprachpaket existiert
+if [[ "$(uname -s)" == "Linux" ]] && locale -a 2>/dev/null | grep -q "de_DE"; then
+    export LANG="de_DE.UTF-8"
+    export LC_CTYPE="de_DE.UTF-8"
+else
+    export LANG="en_US.UTF-8"
+    export LC_CTYPE="en_US.UTF-8"
+fi

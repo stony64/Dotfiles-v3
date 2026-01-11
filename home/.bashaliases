@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# ------------------------------------------------------------------------------
+# FILE:         .bashaliases
+# VERSION:      1.6.3
+# DESCRIPTION:  Befehlsabkürzungen, Sicherheits-Aliase und System-Hilfsmittel.
+# ------------------------------------------------------------------------------
+
+# --- 1. SICHERHEIT (INTERAKTIV) -----------------------------------------------
+alias cp='cp -i'
+alias mv='mv -i'
+alias rm='rm -i'
+alias ln='ln -i'
+alias chown='chown --preserve-root'
+alias chmod='chmod --preserve-root'
+alias chgrp='chgrp --preserve-root'
+alias mkdir='mkdir -p'
+
+# --- 2. NAVIGATION ------------------------------------------------------------
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias -- -='cd -'
+alias home='cd ~'
+
+# --- 3. SYSTEM-MONITORING & TOOLS ---------------------------------------------
+if ls --group-directories-first --color=auto . >/dev/null 2>&1; then
+    alias ls='ls --color=auto --group-directories-first'
+    alias ll='ls -lha --color=auto --group-directories-first --time-style=long-iso'
+else
+    alias ls='ls --color=auto'
+    alias ll='ls -lha --color=auto'
+fi
+
+alias df='df -hT -x tmpfs -x devtmpfs -x squashfs -x overlay'
+alias du='du -h'
+alias du1='du -h --max-depth=1 2>/dev/null | sort -hr'
+alias dutop='du -hs * 2>/dev/null | sort -rh | head -10'
+alias free='free -h --si'
+alias uptime='uptime -p'
+alias cls='clear'
+
+# Kurzbefehle
+alias sc='systemctl'
+alias n='ncdu'
+
+# --- 4. LOGS & DIAGNOSE -------------------------------------------------------
+alias journal='journalctl -n 50 --no-pager | less -R'
+alias dmesg='dmesg --color=always -H'
+# psg: Sucht in Prozessen, zeigt Header an, ignoriert den eigenen grep-Befehl
+alias psg='ps aux | grep -v grep | grep -i -e VSZ -e'
+
+# --- 5. TEXT-VERARBEITUNG & EDITOREN ------------------------------------------
+alias grep='grep --color=auto'
+alias fgrep='grep -F --color=auto'
+alias egrep='grep -E --color=auto'
+alias nano='nano -c'
+alias less='less -R'
+alias tail='tail -n 20 -f'
+alias head='head -n 20'
+
+# --- 6. GIT-ALIASE ------------------------------------------------------------
+alias st='git status'
+alias co='git checkout'
+alias br='git branch'
+alias cm='git commit -m'
+alias acp='git add . && git commit -m'
+alias acpp='git add . && git commit -m "Update" && git push'
+alias gd='git diff --stat'
+alias undo='git reset --soft HEAD~1'
+alias lg='git log --oneline --graph --decorate --all'
+alias gpl='git pull --rebase'
+
+# --- 7. NETZWERK & SSH --------------------------------------------------------
+alias ssh='TERM=xterm-256color ssh'
+
+# Nutzt Framework-Funktion df_myip falls vorhanden, sonst Fallback auf lokale IP
+if command -v df_myip >/dev/null 2>&1; then
+    alias myip='df_myip'
+else
+    # Wir definieren eine temporäre Funktion als Fallback statt eines komplexen Alias
+    myip() { hostname -I | awk '{print $1}'; }
+fi
+
+# --- 8. HILFSWERKZEUGE & KOMFORT ----------------------------------------------
+alias f='find . -iname'
+
+if command -v tree >/dev/null 2>&1; then
+    alias tree='tree -F --dirsfirst --filelimit 50'
+fi
+
+alias path='printf "%b\n" "${PATH//:/\\n}"'
+alias exi='exit'
+alias exti='exit'
+alias chwon='chown'
+alias chmpod='chmod'
+
+# ZWECK: Übersicht aller Framework-Erweiterungen (Sicherheits-Check)
+if command -v show_aliases >/dev/null 2>&1; then
+    alias tools='show_aliases && printf "\n" && show_functions'
+fi
+
+# ZWECK: Systemupdate (Nutzt das neue Wartungsmodul)
+if [[ -f ~/.bashwartung ]]; then
+    alias au='sudo bash -c "source ~/.bashwartung && df_wartung_run"'
+fi

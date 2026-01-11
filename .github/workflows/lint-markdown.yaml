@@ -1,0 +1,55 @@
+# ------------------------------------------------------------------------------
+# FILE:        .github/workflows/lint-markdown.yml
+# VERSION:     1.2.6
+# DESCRIPTION: GitHub Action zur automatisierten Dokumentations-Prüfung.
+# ------------------------------------------------------------------------------
+
+name: Lint Markdown
+
+on:
+    push:
+        branches: [main, master, "release/**"]
+        paths:
+            - "**/*.md"
+            - ".markdownlint*"
+            - "markdownlint-cli2.jsonc"
+    pull_request:
+        branches: [main, master]
+        paths:
+            - "**/*.md"
+            - ".markdownlint*"
+            - "markdownlint-cli2.jsonc"
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions:
+    contents: read
+    pull-requests: read # 'write' nur nötig, wenn die Action Kommentare in PRs schreibt
+
+jobs:
+    markdownlint:
+        name: Markdown Linting
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: 📥 Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: 🔍 Run Markdownlint-cli2
+              uses: DavidAnson/markdownlint-cli2-action@v19
+              with:
+
+            - name: 📝 Job Summary
+              if: always()
+              shell: bash
+              run: |
+                  echo "### Markdown Linting Result" >> $GITHUB_STEP_SUMMARY
+                  if [[ "${{ job.status }}" == "success" ]]; then
+                    echo "✅ Alle Dokumente entsprechen dem Style-Guide v1.4.2." >> $GITHUB_STEP_SUMMARY
+                  else
+                    echo "❌ Fehler in der Markdown-Formatierung gefunden." >> $GITHUB_STEP_SUMMARY
+                    echo "Bitte die Annotations im 'Files changed' Tab prüfen." >> $GITHUB_STEP_SUMMARY
+                  fi

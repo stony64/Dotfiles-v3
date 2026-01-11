@@ -1,0 +1,112 @@
+# ------------------------------------------------------------------------------
+# FILE:        .gitignore
+# VERSION:     1.2.4
+# DESCRIPTION: Schutz vor sensiblen Daten und System-Rückständen.
+# ------------------------------------------------------------------------------
+
+# --- 1. SENSIBLE DATEN & LOKALE KONFIGURATION ---------------------------------
+# Alles mit '_local' bleibt auf dem Rechner (für private API-Keys/Aliase)
+*_local
+*_local.*
+.bash*_local
+.bash_history
+.bash_sessions/
+.ssh/
+.gnupg/
+
+# Credentials und Keys
+.env
+.netrc
+*.key
+*.pem
+*.pub
+*.p12
+*.pfx
+
+# --- 2. EDITOREN & IDES (VS CODE / NANO / VIM) --------------------------------
+# Wir ignorieren persönliche Workspace-Daten, behalten aber Projekt-Standards.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/project-words.txt
+!*.code-workspace
+
+# Temporäre Editor-Dateien (Swap, Backups)
+*.swp
+*.swo
+*~
+*.bak
+*.old
+*.orig
+*.rej
+.history/
+.nfs*
+
+# --- 3. SYSTEM-BALLAST (OS-SPEZIFISCH) ----------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+# Windows
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+# Linux
+.directory
+.fuse_hidden*
+
+# --- 4. LOGS, EXPORTE & TEMPORÄRE DATEN ---------------------------------------
+*.log
+*.tmp
+.dotfiles_state
+.cache/
+
+# Projekt-spezifische Exporte und Protokolle
+_exports/
+review_dump_*
+PROMPT_STYLEGUIDE.txt
+
+# Test-Sandbox (Falls test_suite.sh lokal Dateien erzeugt)
+test_sandbox/
+tests/out/
+
+# --- 5. WHITELIST (ERZWINGE REPOSITORY-CORE) ----------------------------------
+# Hier stellen wir sicher, dass die Architektur trotz globaler Regeln im Index bleibt.
+
+# Framework-Skripte
+!dotfilesctl.sh
+!core.sh
+!lib/
+!lib/**
+
+# Meta-Konfigurationen
+!.shellcheckrc
+!.markdownlint.jsonc
+!.markdownlint-cli2.jsonc
+!.editorconfig
+!.gitattributes
+!.gitignore
+
+# VS Code Standards (explizit erlauben)
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Dotfiles-Struktur (Inhalt inkludieren)
+!home/
+!home/**
+# Sicherstellen, dass versteckte Dotfiles in home/ erfasst werden
+!home/.bash*
+!home/.dircolors
+!home/.nanorc
+
+# Dokumentation
+!STYLEGUIDE.md
+!README.md
+!docs/
+!docs/**
+
+# Lokale Templates (Beispiele behalten)
+!*.example

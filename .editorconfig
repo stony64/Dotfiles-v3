@@ -1,0 +1,44 @@
+# ------------------------------------------------------------------------------
+# FILE:         .editorconfig
+# VERSION:      1.2.4
+# DESCRIPTION:  Zentrale Editor-Konfiguration für Codierung und Formatierung.
+# ------------------------------------------------------------------------------
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+tab_width = 4
+
+[*.{sh,bash}]
+indent_style = space
+indent_size = 4
+
+# Framework-Dateien & Dotfiles
+[{.bash*,.dircolors,.nanorc,.shellcheckrc,bashrc,bashenv,bashaliases}]
+indent_style = space
+indent_size = 4
+
+[*.md]
+max_line_length = off
+trim_trailing_whitespace = false
+
+[*.{yml,yaml,json,jsonc}]
+indent_style = space
+indent_size = 4
+
+# Spezifisch für deine Linter-Dateien
+[{.markdownlint*,.shellcheckrc}]
+indent_style = space
+indent_size = 4
+
+[*.{bat,ps1}]
+end_of_line = crlf
+
+[{Makefile,makefile}]
+indent_style = tab

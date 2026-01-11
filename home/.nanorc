@@ -1,0 +1,55 @@
+# ------------------------------------------------------------------------------
+# FILE:        .nanorc
+# VERSION:     1.4.0
+# DESCRIPTION: Optimiert für Nano 8.4+ (Debian) mit modernen Shortcuts.
+# ------------------------------------------------------------------------------
+
+# --- 1. EDITOR-VERHALTEN & FORMATIERUNG ---------------------------------------
+set autoindent          # Einrückung der vorherigen Zeile beibehalten
+set tabsize 4           # Tabulator-Breite auf 4 Zeichen
+set tabstospaces        # Tabs in Leerzeichen umwandeln
+set softwrap            # Visueller Zeilenumbruch (kein harter Break)
+set atblanks            # Umbruch bevorzugt an Wortgrenzen
+set zap                 # Backspace löscht markierte Blöcke sofort
+set noconvert           # Zeilenenden beim Öffnen nicht automatisch wandeln
+set locking             # .swp Dateien zur Sperrung nutzen
+set jumpyscrolling      # Scrollt zeilenweise statt halbseitenweise (flüssiger)
+
+# --- 2. INTERFACE (UI) & VISUALS ----------------------------------------------
+set linenumbers         # Permanente Zeilennummern
+set constantshow        # Cursor-Position permanent anzeigen
+set indicator           # Scrollbar rechts einblenden
+set minibar             # Kompakte Statusleiste (mehr Platz für Text)
+set stateflags          # Zeigt Modifikationen (Sternchen) an
+set showcursor          # Cursor auch in Menüs sichtbar machen
+set emptyline           # Zusätzliche Leerzeile unter der Titelzeile für Fokus
+
+# --- 3. HISTORIE & POSITIONIERUNG ---------------------------------------------
+set historylog          # Such- und Ersetzungs-Historie speichern
+set positionlog         # Letzte Cursor-Position merken
+
+# --- 4. SYNTAX-HIGHLIGHTING ---------------------------------------------------
+# Systemweite Definitionen laden
+include "/usr/share/nano/*.nanorc"
+# Optionale Benutzer-Definitionen laden
+include "~/.nano/*.nanorc"
+
+# --- 5. MODERN BINDINGS (SHORTCUTS) -------------------------------------------
+# Hinweis: Erfordert 'stty -ixon' in der .bashrc für Strg+S/Q Support.
+bind M-C copy main      # Alt+C:  Kopieren
+bind M-V paste all      # Alt+V:  Einfügen
+bind ^F whereis all     # Strg+F: Suchen
+bind ^H replace main    # Strg+H: Ersetzen
+bind ^S savefile main   # Strg+S: Speichern
+bind ^Q exit all        # Strg+Q: Beenden
+bind ^Z undo main       # Strg+Z: Rückgängig
+bind ^Y redo main       # Strg+Y: Wiederholen
+bind ^D zap main        # Strg+D: Löschen (Zeichen/Block)
+
+# --- 6. DESIGN (FARBSCHEMA) ---------------------------------------------------
+set titlecolor black,cyan     # Titelzeile (Oben)
+set statuscolor black,cyan    # Statuszeile (Unten)
+set keycolor white,blue       # Tastenkombinationen
+set numbercolor yellow,normal # Zeilennummern
+set errorcolor white,red      # Fehlermeldungen
+set selectedcolor black,white # Markierter Text

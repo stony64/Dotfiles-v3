@@ -1,0 +1,59 @@
+# ------------------------------------------------------------------------------
+# FILE:        .dircolors
+# VERSION:     1.2.3
+# DESCRIPTION: Farbedefinitionen für ls und andere GNU-Utilities.
+# ------------------------------------------------------------------------------
+
+# --- GLOBAL SETTINGS ----------------------------------------------------------
+TERM xterm
+TERM xterm-256color
+TERM screen
+TERM screen-256color
+TERM linux
+
+# --- BASIS-FARBEN (ANSI) ------------------------------------------------------
+# 00=Default, 01=Bold, 04=Underline, 05=Blink, 31=Red, 32=Green, 33=Yellow, 34=Blue
+# 35=Magenta, 36=Cyan, 37=White
+RESET 0
+DIR 01;34       # Verzeichnisse: Bold Blue
+LINK 01;36      # Symlinks: Bold Cyan
+MULTIHARDLINK 00
+FIFO 40;33
+SOCK 01;35
+DOOR 01;35
+BLK 40;33;01
+CHR 40;33;01
+ORPHAN 40;31;01 # Verwaiste Links: Red Background
+MISSING 00
+SETUID 37;41
+SETGID 30;43
+CAPABILITY 30;41
+STICKY_OTHER_WRITABLE 30;42
+OTHER_WRITABLE 34;42
+STICKY 37;44
+
+# --- DATEIENDUNGEN (LOGIK) ----------------------------------------------------
+
+# Archive (Rot/Orange)
+.tar 01;31
+.tgz 01;31
+.zip 01;31
+.gz  01;31
+.7z  01;31
+
+# Bilder & Medien (Magenta)
+.jpg  01;35
+.png  01;35
+.gif  01;35
+.webp 01;35
+.mp4  01;35
+
+# Dokumente (Gelb/Weiß)
+.txt  00
+.md   01;33
+.pdf  00;32
+
+# Skripte & Binaries (Grün)
+.sh   01;32
+.bash 01;32
+.py   01;32

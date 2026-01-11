@@ -1,0 +1,12 @@
+{
+    "clipboard": "internal",
+    "colorscheme": "dracula-tc",
+    "indentstyle": "spaces",
+    "infobar": true,
+    "mkparents": true,
+    "ruler": false,
+    "savecursor": true,
+    "scrollbar": true,
+    "softwrap": true,
+    "tabsize": 4
+}
