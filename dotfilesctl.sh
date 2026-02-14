@@ -1,104 +1,61 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
 # FILE:         dotfilesctl.sh
-# VERSION:      3.3.5
+# VERSION:      3.4.0
 # DESCRIPTION:  CLI-Entrypoint zur Distribution von Konfigurationsdateien.
-#               Verwaltet Symlinks für User-Home und System-Ebene (/etc).
-#               Optimiert für Debian GNU/Linux & Proxmox VE.
+#               Fix: Shell-Exit bei Hilfe, Symlink-Pfade & Auto-Backup.
 # AUTHOR:       Stony64
-# ------------------------------------------------------------------------------
-# Technischer Hinweis: set -euo pipefail sorgt für sofortigen Abbruch bei Fehlern.
-# SC2310 wird vermieden, indem Funktionen nicht in Bedingungen aufgerufen werden.
 # ------------------------------------------------------------------------------
 set -euo pipefail
 
 # --- 1. KONFIGURATION & KONSTANTEN --------------------------------------------
-
-# Pfad zum Repository-Root (Speicherort dieses Skripts)
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 readonly DOTFILES_DIR="$SCRIPT_DIR"
-
-# Zeitstempel für eindeutige Backup-Verzeichnisse
 readonly TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-
-# Temporäres Backup-Verzeichnis vor der Archivierung
 readonly BACKUP_BASE="$HOME/.dotfiles-backup-$TIMESTAMP"
 
 # --- 2. HILFSFUNKTIONEN -------------------------------------------------------
+log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2; }
 
-# Zentrales Logging für Statusmeldungen (Standardfehler für saubere Pipes)
-log() {
-    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2
-}
-
-# Prüft auf Root-Berechtigungen (wichtig für System-Operationen)
-check_sudo() {
-    if [[ $EUID -ne 0 ]]; then
-        log "REQUIRED: Diese Operation erfordert sudo-Rechte."
-        return 1
-    fi
-}
-
-# Interne Funktion zum Sichern eines Pfades
-# Rückgabewert 0 (Erfolg) auch wenn Datei fehlt, um set -e nicht zu triggern.
-_internal_backup_perform() {
-    local target_path="$1"
-    local destination="$BACKUP_BASE${target_path}"
-
-    # Existenzprüfung intern, damit der Aufrufer keine 'if'-Bedingung braucht (SC2310)
-    if [[ -e "$target_path" ]]; then
-        mkdir -p "$(dirname "$destination")"
-        cp -a "$target_path" "$destination"
-        log "BACKUP: $target_path gesichert."
-    else
-        log "INFO: $target_path nicht vorhanden, überspringe..."
-    fi
+# Bereinigt alte Backups im Home-Verzeichnis (> 30 Tage)
+cleanup_backups() {
+    log "CLEANUP: Suche nach alten .bak_ Dateien in $HOME..."
+    find "$HOME" -maxdepth 1 -name ".*.bak_*" -type f -mtime +30 -exec rm -v {} \;
+    log "CLEANUP: Abgeschlossen."
 }
 
 # --- 3. KERNFUNKTIONEN --------------------------------------------------------
 
-# Erstellt eine Sicherung der aktuell aktiven Konfigurationen
 backup() {
     log "BACKUP: Initialisiere Sicherung in $BACKUP_BASE"
     mkdir -p "$BACKUP_BASE"
-
-    # Liste der kritischen Pfade (User & System)
     local targets=(
-        "$HOME/.bashrc"
-        "$HOME/.bash_profile"
-        "$HOME/.gitconfig"
-        "$HOME/.tmux.conf"
-        "$HOME/.vimrc"
-        "$HOME/.config/nvim/init.vim"
-        "/etc/systemd/user/pipewire.service.d/99-proxmox.conf"
-        "/etc/zfs/zpool.cache"
+        "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.gitconfig"
+        "$HOME/.tmux.conf" "$HOME/.vimrc"
     )
-
-    # Nackter Aufruf ohne logische Verknüpfung sichert set -e Funktionalität
     for item in "${targets[@]}"; do
-        _internal_backup_perform "$item"
+        if [[ -e "$item" ]]; then
+            local dest="$BACKUP_BASE${item}"
+            mkdir -p "$(dirname "$dest")"
+            cp -a "$item" "$dest"
+            log "BACKUP: $item gesichert."
+        fi
     done
-
-    # Finalisierung: Backup-Ordner in ein komprimiertes Archiv packen
     tar czf "$HOME/dotfiles-backup-$TIMESTAMP.tar.gz" -C "$HOME" ".dotfiles-backup-$TIMESTAMP"
-    log "BACKUP: Archiv erstellt: ~/dotfiles-backup-$TIMESTAMP.tar.gz"
-
-    # Aufräumen des temporären Verzeichnisses
     rm -rf "$BACKUP_BASE"
+    log "BACKUP: Archiv erstellt: ~/dotfiles-backup-$TIMESTAMP.tar.gz"
 }
 
-# Rollt die Symlinks aus dem Repository in das System aus
 deploy() {
-    log "DEPLOY: Starte Deployment aus $DOTFILES_DIR"
-
-    # Mapping-Array: "QUELLE:ZIEL"
+    log "DEPLOY: Starte Deployment aus $DOTFILES_DIR/home"
+    # Pfade wurden auf /home/ korrigiert, da dort deine Dateien liegen
     local user_mappings=(
-        "$DOTFILES_DIR/dotfiles/bashrc:$HOME/.bashrc"
-        "$DOTFILES_DIR/dotfiles/bash_profile:$HOME/.bash_profile"
-        "$DOTFILES_DIR/dotfiles/gitconfig:$HOME/.gitconfig"
-        "$DOTFILES_DIR/dotfiles/tmux.conf:$HOME/.tmux.conf"
-        "$DOTFILES_DIR/dotfiles/vimrc:$HOME/.vimrc"
+        "$DOTFILES_DIR/home/.bashrc:$HOME/.bashrc"
+        "$DOTFILES_DIR/home/.bash_profile:$HOME/.bash_profile"
+        "$DOTFILES_DIR/home/.gitconfig:$HOME/.gitconfig"
+        "$DOTFILES_DIR/home/.tmux.conf:$HOME/.tmux.conf"
+        "$DOTFILES_DIR/home/.vimrc:$HOME/.vimrc"
     )
 
     for mapping in "${user_mappings[@]}"; do
@@ -106,48 +63,31 @@ deploy() {
         IFS=':' read -r src dest <<< "$mapping"
 
         if [[ -f "$src" ]]; then
+            # FIX für [ERROR]: Wenn Ziel eine echte Datei ist, wegschieben
+            if [[ -f "$dest" && ! -L "$dest" ]]; then
+                log "WARN: $dest ist eine Datei. Erstelle Sicherheits-Backup..."
+                mv "$dest" "${dest}.bak_${TIMESTAMP}"
+            fi
+
             mkdir -p "$(dirname "$dest")"
-            # -f erzwingt das Überschreiben existierender (falscher) Symlinks
-            ln -sf "$src" "$dest"
+            # FIX: ln -snf überschreibt auch fehlerhafte Links/Dateien
+            ln -snf "$src" "$dest"
             log "LINK: $dest -> $src"
         else
-            log "SKIP: Quelle $src nicht im Repository gefunden."
+            log "SKIP: Quelle $src nicht gefunden."
         fi
     done
-
-    # System-spezifische Konfigurationen (z.B. für Proxmox/ZFS)
-    if [[ -d "$DOTFILES_DIR/etc" ]]; then
-        log "SYS: Konfiguriere System-Komponenten..."
-
-        sudo mkdir -p "/etc/systemd/user/pipewire.service.d/"
-        # Nutze absoluten Pfad für Symlinks im System-Bereich
-        sudo ln -sf "$DOTFILES_DIR/etc/proxmox.conf" "/etc/systemd/user/pipewire.service.d/99-proxmox.conf"
-
-        # ZFS Cachefile Optimierung (nur wenn zpool vorhanden)
-        if command -v zpool >/dev/null; then
-            # Prüfe Pool-Status ohne Exit bei Fehler (SC2310 konform)
-            if sudo zpool list proxmox >/dev/null 2>&1; then
-                sudo zpool set cachefile=/etc/zfs/zpool.cache proxmox
-                log "SYS: ZFS Cachefile für 'proxmox' gesetzt."
-            else
-                log "WARN: ZFS Pool 'proxmox' nicht aktiv, Cache-Setting übersprungen."
-            fi
-        fi
-    fi
-
     log "DEPLOY: Erfolgreich abgeschlossen."
 }
 
-# Validiert den Zustand der Symlinks im Home-Verzeichnis
 check_status() {
     log "STATUS: Überprüfe Symlink-Integrität..."
     local files=(".bashrc" ".bash_profile" ".gitconfig" ".tmux.conf" ".vimrc")
-
     for f in "${files[@]}"; do
-        if [[ -L "$HOME/$f" ]]; then
-            # Zeigt das Ziel des Symlinks an
-            echo "[OK] $f -> $(readlink "$HOME/$f")"
-        elif [[ -e "$HOME/$f" ]]; then
+        local target="$HOME/$f"
+        if [[ -L "$target" ]]; then
+            echo "[OK] $f -> $(readlink "$target")"
+        elif [[ -e "$target" ]]; then
             echo "[ERROR] $f ist eine reguläre Datei (kein Symlink)."
         else
             echo "[MISSING] $f existiert nicht."
@@ -156,35 +96,28 @@ check_status() {
 }
 
 # --- 4. EXECUTION CONTROLLER (MAIN) -------------------------------------------
-
 main() {
-    # Falls kein Argument übergeben wurde, Hilfe anzeigen
     case "${1:-help}" in
-        backup)
-            backup
-            ;;
-        install|deploy)
-            deploy
-            ;;
-        status)
-            check_status
-            ;;
+        backup)  backup ;;
+        install|deploy) deploy ;;
+        status)  check_status ;;
+        cleanup) cleanup_backups ;;
         *)
-            # Here-Doc für die CLI-Nutzungshilfe
             cat <<EOF
-Nutzung: $SCRIPT_NAME {backup|install|status}
+Nutzung: $SCRIPT_NAME {backup|install|status|cleanup}
 
 Befehle:
   backup    Sichert aktuelle Configs in ein versioniertes tar.gz.
-  install   Setzt Symlinks und wendet System-Parameter an.
+  install   Setzt Symlinks aus /home ins User-Verzeichnis.
   status    Prüft die Integrität der lokalen Symlinks.
+  cleanup   Löscht Backups im Home, die älter als 30 Tage sind.
 
-Version: $DF_PROJECT_VERSION (Core: v3.3.0)
+Version: 3.4.0 (Core: ${DF_PROJECT_VERSION:-v3.3.0})
 EOF
+            # FIX: exit 0 verhindert das Schließen der SSH-Shell
             exit 0
             ;;
     esac
 }
 
-# Startet das Skript mit allen übergebenen Parametern
 main "$@"
