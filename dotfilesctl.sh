@@ -50,34 +50,31 @@ backup() {
 }
 
 deploy() {
-    log "DEPLOY: Starte Deployment aus $DOTFILES_DIR/home"
-    local user_mappings=(
-        "$DOTFILES_DIR/home/.bashrc:$HOME/.bashrc"
-        "$DOTFILES_DIR/home/.bash_profile:$HOME/.bash_profile"
-        "$DOTFILES_DIR/home/.gitconfig:$HOME/.gitconfig"
-        "$DOTFILES_DIR/home/.tmux.conf:$HOME/.tmux.conf"
-        "$DOTFILES_DIR/home/.vimrc:$HOME/.vimrc"
-    )
+    log "DEPLOY: Starte dynamisches Deployment aus $DOTFILES_DIR/home"
 
-    for mapping in "${user_mappings[@]}"; do
-        local src dest
-        IFS=':' read -r src dest <<< "$mapping"
+    # Gehe durch ALLE Dateien im home-Ordner des Repos
+    # Wir nutzen nullglob, damit die Schleife nicht leer läuft
+    shopt -s dotglob nullglob
+    for src_path in "$DOTFILES_DIR/home"/*; do
+        # Nur Dateien verarbeiten, keine Ordner (außer du willst das)
+        [[ -d "$src_path" ]] && continue
 
-        if [[ -f "$src" ]]; then
-            if [[ -f "$dest" && ! -L "$dest" ]]; then
-                log "WARN: $dest ist eine Datei. Erstelle Sicherheits-Backup..."
-                mv "$dest" "${dest}.bak_${TIMESTAMP}"
-            fi
-            mkdir -p "$(dirname "$dest")"
-            ln -snf "$src" "$dest"
-            log "LINK: $dest -> $src"
-        else
-            log "SKIP: Quelle $src nicht gefunden."
+        local filename
+        filename=$(basename "$src_path")
+        local dest="$HOME/$filename"
+
+        # Backup bei regulärer Datei
+        if [[ -f "$dest" && ! -L "$dest" ]]; then
+            log "WARN: $dest ist eine Datei. Backup erstellt."
+            mv "$dest" "${dest}.bak_${TIMESTAMP}"
         fi
-    done
-    log "DEPLOY: Erfolgreich abgeschlossen."
-}
 
+        ln -snf "$src_path" "$dest"
+        log "LINK: $dest -> $filename"
+    done
+    shopt -u dotglob nullglob
+    log "DEPLOY: Abgeschlossen."
+}
 check_status() {
     log "STATUS: Überprüfe Symlink-Integrität..."
     local files=(".bashrc" ".bash_profile" ".gitconfig" ".tmux.conf" ".vimrc")
