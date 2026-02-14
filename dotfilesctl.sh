@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
 # FILE:         dotfilesctl.sh
-# VERSION:      3.4.0
+# VERSION:      3.4.1
 # DESCRIPTION:  CLI-Entrypoint zur Distribution von Konfigurationsdateien.
-#               Fix: Shell-Exit bei Hilfe, Symlink-Pfade & Auto-Backup.
+#               Fix: Pfad-Auflösung via readlink -f (Symlink-Safe).
 # AUTHOR:       Stony64
 # ------------------------------------------------------------------------------
 set -euo pipefail
 
 # --- 1. KONFIGURATION & KONSTANTEN --------------------------------------------
+# Pfad-Fix für Aufrufe über Symlinks (/usr/local/bin)
 readonly REAL_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 readonly SCRIPT_DIR="$(cd "$(dirname "$REAL_PATH")" && pwd)"
 readonly SCRIPT_NAME="$(basename "$REAL_PATH")"
 readonly DOTFILES_DIR="$SCRIPT_DIR"
 
+readonly TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+readonly BACKUP_BASE="$HOME/.dotfiles-backup-$TIMESTAMP"
 
 # --- 2. HILFSFUNKTIONEN -------------------------------------------------------
 log() { echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2; }
 
-# Bereinigt alte Backups im Home-Verzeichnis (> 30 Tage)
 cleanup_backups() {
     log "CLEANUP: Suche nach alten .bak_ Dateien in $HOME..."
     find "$HOME" -maxdepth 1 -name ".*.bak_*" -type f -mtime +30 -exec rm -v {} \;
@@ -49,7 +51,6 @@ backup() {
 
 deploy() {
     log "DEPLOY: Starte Deployment aus $DOTFILES_DIR/home"
-    # Pfade wurden auf /home/ korrigiert, da dort deine Dateien liegen
     local user_mappings=(
         "$DOTFILES_DIR/home/.bashrc:$HOME/.bashrc"
         "$DOTFILES_DIR/home/.bash_profile:$HOME/.bash_profile"
@@ -63,14 +64,11 @@ deploy() {
         IFS=':' read -r src dest <<< "$mapping"
 
         if [[ -f "$src" ]]; then
-            # FIX für [ERROR]: Wenn Ziel eine echte Datei ist, wegschieben
             if [[ -f "$dest" && ! -L "$dest" ]]; then
                 log "WARN: $dest ist eine Datei. Erstelle Sicherheits-Backup..."
                 mv "$dest" "${dest}.bak_${TIMESTAMP}"
             fi
-
             mkdir -p "$(dirname "$dest")"
-            # FIX: ln -snf überschreibt auch fehlerhafte Links/Dateien
             ln -snf "$src" "$dest"
             log "LINK: $dest -> $src"
         else
@@ -99,7 +97,7 @@ check_status() {
 main() {
     case "${1:-help}" in
         backup)  backup ;;
-        install|deploy) deploy ;;
+        install|deploy|--all) deploy ;; # --all jetzt auch unterstützt
         status)  check_status ;;
         cleanup) cleanup_backups ;;
         *)
@@ -112,9 +110,8 @@ Befehle:
   status    Prüft die Integrität der lokalen Symlinks.
   cleanup   Löscht Backups im Home, die älter als 30 Tage sind.
 
-Version: 3.4.0 (Core: ${DF_PROJECT_VERSION:-v3.3.0})
+Version: 3.4.1 (Repo: $DOTFILES_DIR)
 EOF
-            # FIX: exit 0 verhindert das Schließen der SSH-Shell
             exit 0
             ;;
     esac
