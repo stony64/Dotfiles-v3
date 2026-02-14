@@ -17,15 +17,15 @@ export DF_PROJECT_VERSION="3.3.0"
 export DF_REPO_ROOT="${DF_REPO_ROOT:-/opt/dotfiles}"
 
 # --- UI KONSTANTEN ------------------------------------------------------------
-readonly DF_C_RED=$'\033[31m'
-readonly DF_C_GREEN=$'\033[32m'
-readonly DF_C_YELLOW=$'\033[33m'
-readonly DF_C_BLUE=$'\033[34m'
-readonly DF_C_RESET=$'\033[0m'
+DF_C_RED=$'\033[31m'
+DF_C_GREEN=$'\033[32m'
+DF_C_YELLOW=$'\033[33m'
+DF_C_BLUE=$'\033[34m'
+DF_C_RESET=$'\033[0m'
 
-readonly DF_SYM_OK='[OK]'
-readonly DF_SYM_ERR='[ERR]'
-readonly DF_SYM_WARN='[!]'
+DF_SYM_OK='[OK]'
+DF_SYM_ERR='[ERR]'
+DF_SYM_WARN='[!]'
 
 # --- 1. LOGGING & UI (P2) -----------------------------------------------------
 df_log_info() { printf '%b%s%b\n' "$DF_C_BLUE" "--> $*" "$DF_C_RESET"; }
