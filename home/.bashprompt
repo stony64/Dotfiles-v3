@@ -7,13 +7,13 @@
 # ------------------------------------------------------------------------------
 
 # --- FARBDEFINITIONEN (PS1-Maskiert) ------------------------------------------
-readonly P_BLUE='\[\e[34m\]'
-readonly P_GREEN='\[\e[32m\]'
-readonly P_CYAN='\[\e[36m\]'
-readonly P_YELLOW='\[\e[33m\]'
-readonly P_RED='\[\e[31m\]'
-readonly P_MAGENTA='\[\e[35m\]'
-readonly P_RESET='\[\e[0m\]'
+P_BLUE='\[\e[34m\]'
+P_GREEN='\[\e[32m\]'
+P_CYAN='\[\e[36m\]'
+P_YELLOW='\[\e[33m\]'
+P_RED='\[\e[31m\]'
+P_MAGENTA='\[\e[35m\]'
+P_RESET='\[\e[0m\]'
 
 # --- GIT PROMPT (Erweitert) ---------------------------------------------------
 # --- GIT PROMPT (Erweitert) ---------------------------------------------------

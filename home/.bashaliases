@@ -53,8 +53,8 @@ ll() { command "$_ls_tool" $_ls_flags -la --time-style=long-iso "$@"; }
 la() { command "$_ls_tool" $_ls_flags -lA "$@"; }
 l()  { command "$_ls_tool" $_ls_flags -lh "$@"; }
 
-readonly _ls_tool
-readonly _ls_flags
+_ls_tool
+_ls_flags
 
 # --- 4. SYSTEM/DISK -----------------------------------------------------------
 alias df='df -hT -x tmpfs -x devtmpfs -x squashfs -x overlay'
