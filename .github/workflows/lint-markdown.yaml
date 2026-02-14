@@ -1,55 +1,80 @@
 # ------------------------------------------------------------------------------
-# FILE:        .github/workflows/lint-markdown.yml
-# VERSION:     1.2.6
-# DESCRIPTION: GitHub Action zur automatisierten Dokumentations-Prüfung.
+# FILE:          .github/workflows/lint-markdown.yml
+# VERSION:       1.3.0
+# DESCRIPTION:   GitHub Action: Markdown Linting mit SARIF Annotations (v19.1.2).
+# AUTHOR:        [User] - Proxmox/Debian Dotfiles + Inline Comments
 # ------------------------------------------------------------------------------
 
-name: Lint Markdown
+name: "📝 Lint Markdown"
 
 on:
-    push:
-        branches: [main, master, "release/**"]
-        paths:
-            - "**/*.md"
-            - ".markdownlint*"
-            - "markdownlint-cli2.jsonc"
-    pull_request:
-        branches: [main, master]
-        paths:
-            - "**/*.md"
-            - ".markdownlint*"
-            - "markdownlint-cli2.jsonc"
-    workflow_dispatch:
+  push:
+    branches: [main, master, "release/**"]
+    paths:
+      - "**/*.md"
+      - ".markdownlint*"
+      - "markdownlint-cli2.jsonc"
+      - ".github/workflows/lint-markdown.yml"
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
 
 concurrency:
-    group: ${{ github.workflow }}-${{ github.ref }}
-    cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
-    contents: read
-    pull-requests: read # 'write' nur nötig, wenn die Action Kommentare in PRs schreibt
+  contents: read
+  pull-requests: write
+  checks: write
 
 jobs:
-    markdownlint:
-        name: Markdown Linting
-        runs-on: ubuntu-latest
+  markdownlint:
+    name: "🔍 Markdown Linting"
+    runs-on: ubuntu-latest
 
-        steps:
-            - name: 📥 Checkout Repository
-              uses: actions/checkout@v4
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-            - name: 🔍 Run Markdownlint-cli2
-              uses: DavidAnson/markdownlint-cli2-action@v19
-              with:
+      - name: 🔍 Run markdownlint-cli2
+        uses: DavidAnson/markdownlint-cli2-action@v19.1.2
+        with:
+          config_file: markdownlint-cli2.jsonc
+          globs: |
+            **/*.md
+            README.md
+          report: report.json
+        continue-on-error: false
 
-            - name: 📝 Job Summary
-              if: always()
-              shell: bash
-              run: |
-                  echo "### Markdown Linting Result" >> $GITHUB_STEP_SUMMARY
-                  if [[ "${{ job.status }}" == "success" ]]; then
-                    echo "✅ Alle Dokumente entsprechen dem Style-Guide v1.4.2." >> $GITHUB_STEP_SUMMARY
-                  else
-                    echo "❌ Fehler in der Markdown-Formatierung gefunden." >> $GITHUB_STEP_SUMMARY
-                    echo "Bitte die Annotations im 'Files changed' Tab prüfen." >> $GITHUB_STEP_SUMMARY
-                  fi
+      - name: 📊 Upload SARIF (Annotations)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: report.sarif
+          checkout_path: ${{ github.workspace }}
+
+      - name: 📝 Job Summary
+        if: always()
+        run: |
+          echo "### Markdown Linting Status: ${{ job.status }}"
+
+          if [[ "${{ job.status }}" == "success" ]]; then
+            echo ""
+            echo "✅ **Alle Markdown-Dateien** entsprechen Style-Guide v1.4.2"
+            echo "**Files checked:** $(find . -name '*.md' | wc -l | xargs)"
+            echo "**Linting config:** [markdownlint-cli2.jsonc](markdownlint-cli2.jsonc)"
+          else
+            echo ""
+            echo "❌ **Linting-Fehler** gefunden → siehe **Annotations**!"
+            echo "**Fix Annotations:** Files changed Tab (rot hervorgehoben)"
+            echo "**Config:** [markdownlint-cli2.jsonc](markdownlint-cli2.jsonc)"
+          fi
+
+          echo ""
+          echo "---"
+          echo "*Triggered by:* ${{ github.event_name }} #${{ github.run_number }}"
+        shell: bash

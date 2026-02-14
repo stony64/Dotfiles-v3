@@ -1,105 +1,164 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
-# FILE:         .bashaliases
-# VERSION:      1.6.3
-# DESCRIPTION:  Befehlsabkürzungen, Sicherheits-Aliase und System-Hilfsmittel.
+# FILE:          .bashaliases
+# VERSION:       1.8.3
+# DESCRIPTION:   Power Aliases - ShellCheck Compliant (No SC2262/SC2139)
+# AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 
 # --- 1. SICHERHEIT (INTERAKTIV) -----------------------------------------------
-alias cp='cp -i'
-alias mv='mv -i'
-alias rm='rm -i'
-alias ln='ln -i'
+alias cp='cp -i --preserve=all'
+alias mv='mv -i --preserve=all'
+alias rm='rm -i --preserve-root=always'
+alias ln='ln -i -v'
 alias chown='chown --preserve-root'
 alias chmod='chmod --preserve-root'
 alias chgrp='chgrp --preserve-root'
-alias mkdir='mkdir -p'
+alias mkdir='mkdir -p -v'
 
 # --- 2. NAVIGATION ------------------------------------------------------------
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
+alias ~='cd ~'
 alias -- -='cd -'
 alias home='cd ~'
 
-# --- 3. SYSTEM-MONITORING & TOOLS ---------------------------------------------
-if ls --group-directories-first --color=auto . >/dev/null 2>&1; then
-    alias ls='ls --color=auto --group-directories-first'
-    alias ll='ls -lha --color=auto --group-directories-first --time-style=long-iso'
+# --- 3. LS LOGIK (Funktionen statt Aliase zur Vermeidung von SC2139/SC2262) ----
+
+# Wir bestimmen das Tool einmalig beim Laden.
+# WICHTIG: Wir nutzen 'command ls', um SC2218 zu vermeiden.
+if command -v eza >/dev/null 2>&1; then
+    _ls_tool="eza"
+    _ls_flags="--group-directories-first --git --icons"
+elif command -v lsd >/dev/null 2>&1; then
+    _ls_tool="lsd"
+    _ls_flags="--group-dirs-first --icon always"
 else
-    alias ls='ls --color=auto'
-    alias ll='ls -lha --color=auto'
+    _ls_tool="ls"
+    # FIX SC2218: 'command' stellt sicher, dass das System-ls genutzt wird,
+    # nicht die unten definierte Funktion.
+    if command ls --group-directories-first . >/dev/null 2>&1; then
+        _ls_flags="--color=auto --group-directories-first"
+    else
+        _ls_flags="--color=auto"
+    fi
 fi
 
+# Jetzt definieren wir die Befehle als Funktionen.
+# Wir nutzen den vollen Pfad oder 'command', um Rekursion zu verhindern.
+
+ls() { command "$_ls_tool" $_ls_flags "$@"; }
+ll() { command "$_ls_tool" $_ls_flags -la --time-style=long-iso "$@"; }
+la() { command "$_ls_tool" $_ls_flags -lA "$@"; }
+l()  { command "$_ls_tool" $_ls_flags -lh "$@"; }
+
+readonly _ls_tool
+readonly _ls_flags
+
+# --- 4. SYSTEM/DISK -----------------------------------------------------------
 alias df='df -hT -x tmpfs -x devtmpfs -x squashfs -x overlay'
 alias du='du -h'
-alias du1='du -h --max-depth=1 2>/dev/null | sort -hr'
-alias dutop='du -hs * 2>/dev/null | sort -rh | head -n 10'
+alias du1='LC_ALL=C du -h --max-depth=1 2>/dev/null | LC_ALL=C sort -hr'
+alias dutop='LC_ALL=C du -hs * 2>/dev/null | LC_ALL=C sort -rh | LC_ALL=C head -n 10'
 alias free='free -h --si'
 alias uptime='uptime -p'
-alias cls='clear'
+alias cls='clear && ls'
 
-# Kurzbefehle
 alias sc='systemctl'
+alias jc='journalctl -n 50 --no-pager'
 alias n='ncdu'
+alias psmem='ps auxf | sort -nr -k 4 | head -15'
 
-# --- 4. LOGS & DIAGNOSE -------------------------------------------------------
+# --- 5. LOGS/DIAGNOSE ---------------------------------------------------------
 alias journal='journalctl -n 50 --no-pager | less -R'
-alias dmesg='dmesg --color=always -H'
-# psg: Sucht in Prozessen, zeigt Header an, ignoriert den eigenen grep-Befehl
-alias psg='ps aux | grep -v grep | grep -i -e VSZ -e'
+alias dmesg='dmesg --color=always -H -T'
+alias psg='ps auxf | grep -v grep | grep -i -e VSZ -e'
+alias ports='ss -tulpn | grep LISTEN'
 
-# --- 5. TEXT-VERARBEITUNG & EDITOREN ------------------------------------------
+# --- 6. TEXT/GREP -------------------------------------------------------------
 alias grep='grep --color=auto'
 alias fgrep='grep -F --color=auto'
 alias egrep='grep -E --color=auto'
+alias rgrep='grep -rni --exclude-dir={.git,node_modules}'
 alias nano='nano -c'
 alias less='less -R'
 alias tail='tail -n 20 -f'
 alias head='head -n 20'
 
-# --- 6. GIT-ALIASE ------------------------------------------------------------
+# --- 7. GIT (Power-Shortcuts) -------------------------------------------------
+alias g='git'
 alias st='git status'
 alias co='git checkout'
-alias br='git branch'
+alias br='git branch -v'
 alias cm='git commit -m'
-alias acp='git add . && git commit -m'
-alias acpp='git add . && git commit -m "Update" && git push'
+alias ca='git add . && git commit -m'
+alias capp='git add . && git commit -m "Update" && git push'
 alias gd='git diff --stat'
+alias gds='git diff --stat --cached'
 alias undo='git reset --soft HEAD~1'
-alias lg='git log --oneline --graph --decorate --all'
+alias lg='git log --oneline --graph --decorate --all -15'
 alias gpl='git pull --rebase'
 
-# --- 7. NETZWERK & SSH --------------------------------------------------------
-alias ssh='TERM=xterm-256color ssh'
+# Funktion statt Alias für dynamische Branch-Ermittlung
+gpsh() {
+    local branch
+    branch=$(git branch --show-current)
+    git push --set-upstream origin "$branch"
+}
 
-# Nutzt Framework-Funktion df_myip falls vorhanden, sonst Fallback auf lokale IP
-if command -v df_myip >/dev/null 2>&1; then
-    alias myip='df_myip'
-else
-    # Wir definieren eine temporäre Funktion als Fallback statt eines komplexen Alias
-    myip() { hostname -I | awk '{print $1}'; }
-fi
+# --- 8. PROXMOX/ZFS -----------------------------------------------------------
+alias pct='pct -logfile /tmp/pct.log'
+alias qm='qm -logfile /tmp/qm.log'
+alias zfs='zfs -p'
+alias zpool='zpool -m'
+alias pvestat='pvesh get "/nodes/$(hostname)/status"'
 
-# --- 8. HILFSWERKZEUGE & KOMFORT ----------------------------------------------
+zfslist() {
+    local pool
+    pool=$(zpool list -H -o name | head -1)
+    if [[ -n "$pool" ]]; then
+        zfs list -o space,name,mountpoint -r "$pool"
+    fi
+}
+
+# --- 9. NETZWERK/SSH ----------------------------------------------------------
+alias ssh='TERM=xterm-256color ssh -o ServerAliveInterval=60'
+
+myip() {
+    if command -v df_myip >/dev/null 2>&1; then
+        df_myip
+    else
+        hostname -I | awk '{print $1}'
+    fi
+}
+
+# --- 10. HILFSWERKZEUGE -------------------------------------------------------
 alias f='find . -iname'
-
-if command -v tree >/dev/null 2>&1; then
-    alias tree='tree -F --dirsfirst --filelimit 50'
-fi
-
-alias path='printf "%b\n" "${PATH//:/\\n}"'
+alias path='printf "%s\n" "${PATH//:/\\n}" | column'
 alias exi='exit'
 alias exti='exit'
 alias chwon='chown'
 alias chmpod='chmod'
 
-# ZWECK: Übersicht aller Framework-Erweiterungen (Sicherheits-Check)
-if command -v show_aliases >/dev/null 2>&1; then
-    alias tools='show_aliases && printf "\n" && show_functions'
+if command -v tree >/dev/null 2>&1; then
+    alias tree='tree -F --dirsfirst --filelimit 50 --gitignore'
 fi
 
-# ZWECK: Systemupdate (Nutzt das neue Wartungsmodul)
+# Framework Integration (Fix SC2015)
+tools() {
+    if command -v show_aliases >/dev/null 2>&1; then
+        show_aliases | head -30
+        echo
+        show_functions | head -20
+        echo
+        myip
+    else
+        alias
+    fi
+}
+
+# Wartung Shortcut
 if [[ -f ~/.bashwartung ]]; then
     alias au='sudo bash -c "source ~/.bashwartung && df_wartung_run"'
 fi

@@ -1,94 +1,100 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
-# FILE:         .bashwartung
-# VERSION:      1.0.1
-# DESCRIPTION:  System-Wartung mit SC2015-bereinigten Host-Hooks.
+# FILE:          .bashwartung
+# VERSION:       1.2.0
+# DESCRIPTION:   System-Wartung (ShellCheck optimized)
+# AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 
-# --- 0. INITIALISIERUNG -------------------------------------------------------
+# --- 0. INITIALISIERUNG (Standalone Logging) ----------------------------------
 if ! command -v df_log_error >/dev/null 2>&1; then
-    df_log_error()   { printf '\033[31m[ERR]\033[0m %s\n' "$*"; }
+    df_log_error()   { printf '\033[31m[ERR]\033[0m %s\n' "$*" >&2; }
     df_log_success() { printf '\033[32m[OK]\033[0m %s\n' "$*"; }
     df_log_info()    { printf '\033[34m-->\033[0m %s\n' "$*"; }
+    df_log_warn()    { printf '\033[33m[!]\033[0m %s\n' "$*"; }
 fi
 
-# --- 1. INTERNE HILFSFUNKTIONEN -----------------------------------------------
-
+# --- 1. APT HELFER ------------------------------------------------------------
 _df_wartung_apt_common() {
     export DEBIAN_FRONTEND=noninteractive
-    df_log_info "APT Update + Upgrade..."
+    df_log_info "APT: Update + Upgrade..."
 
-    if ! apt update; then
-        df_log_error "apt update fehlgeschlagen"
-        return 1
-    fi
-
-    if ! apt upgrade -y; then
-        df_log_error "apt upgrade fehlgeschlagen"
-        return 1
-    fi
-
-    apt autoremove -y || df_log_info "autoremove übersprungen"
-    apt autoclean || df_log_info "autoclean übersprungen"
-
-    return 0
+    apt-get update     || { df_log_error "apt update fehlgeschlagen"; return 1; }
+    apt-get upgrade -y || { df_log_error "apt upgrade fehlgeschlagen"; return 1; }
+    apt-get autoremove -yqq || df_log_info "autoremove OK"
+    apt-get autoclean  || df_log_info "autoclean OK"
 }
 
 # --- 2. HAUPTFUNKTION ---------------------------------------------------------
-
 df_wartung_run() {
-    if [[ "$(uname -s)" != *"Linux"* ]]; then
-        df_log_error "Funktion nur unter Linux verfügbar."
-        return 1
-    fi
+    printf '\033[1m========================================\033[0m\n'
+    df_log_info "System-Wartung: $(hostname) ($(date '+%Y-%m-%d %H:%M:%S'))"
+    printf '\033[1m========================================\033[0m\n\n'
 
-    printf '\033[1m########################################\033[0m\n'
-    df_log_info "System-Wartung für Host: $(hostname)"
-    printf '\033[1m########################################\033[0m\n\n'
+    # Grundlegende Checks
+    [[ "$(uname -s)" != *"Linux"* ]] && { df_log_error "Nur Linux unterstützt!"; return 1; }
+    [[ $EUID -ne 0 ]] && { df_log_error "sudo / Root-Rechte erforderlich!"; return 1; }
+    command -v apt-get >/dev/null 2>&1 || { df_log_error "apt-get nicht gefunden!"; return 1; }
 
-    if [[ "$EUID" -ne 0 ]]; then
-        df_log_error "Root-Rechte erforderlich (sudo)."
-        return 1
-    fi
-
-    if ! command -v apt >/dev/null 2>&1; then
-        df_log_error "apt nicht gefunden."
-        return 1
-    fi
-
-    # 1. APT Standard-Wartung
+    # 1. APT Basis-Wartung
     _df_wartung_apt_common || return 1
 
-    # 2. Host-spezifische Hooks (SC2015 Fix: Explizite if-Strukturen)
-    case "$(hostname)" in
-        proxmox*)
-            df_log_info "Proxmox-Spezial: pveam update..."
-            if command -v pveam >/dev/null 2>&1; then
-                pveam update || df_log_error "pveam update fehlgeschlagen."
-            else
-                df_log_info "pveam ist auf diesem Host nicht aktiv."
-            fi
-            ;;
-        raspifix*|pihole*)
-            df_log_info "Pi-hole-Spezial: Updates..."
-            if command -v pihole >/dev/null 2>&1; then
-                pihole -up || df_log_error "Pi-hole Update fehlgeschlagen."
-            else
-                df_log_info "pihole Kommando nicht gefunden."
-            fi
+# --- 2. HOST-SPEZIFISCH (Proxmox Teil) ----------------------------------------
+case "$(hostname)" in
+    proxmox*|pve*)
+        df_log_info "Proxmox: pveam + ZFS + pvetm..."
 
-            if command -v pihole-updatelists >/dev/null 2>&1; then
-                pihole-updatelists || df_log_error "pihole-updatelists fehlgeschlagen."
-            fi
-            ;;
-    esac
+        # FIX SC2015: Saubere Trennung von Existenzprüfung und Ausführung
+        if command -v pveam >/dev/null 2>&1; then
+            pveam update || df_log_error "pveam update fehlgeschlagen"
+        else
+            df_log_warn "pveam nicht gefunden, überspringe..."
+        fi
 
-    # 3. Locate-Datenbank
-    if command -v updatedb >/dev/null 2>&1; then
-        df_log_info "Aktualisiere locate-Datenbank..."
-        updatedb || df_log_info "updatedb fehlgeschlagen."
+        # ZFS Scrub (Optimiert)
+        if command -v zpool >/dev/null 2>&1; then
+            if zpool list >/dev/null 2>&1; then
+                local pool
+                pool=$(zpool list -H -o name | head -1)
+                if ! zpool status "$pool" | grep -q "scrub in progress"; then
+                    zpool scrub "$pool"
+                    df_log_success "ZFS Scrub auf $pool gestartet"
+                fi
+            fi
+        fi
+        ;;
+    # ... restliche Cases
+esac
+
+    # 3. CONTAINER (Docker/Podman)
+    if command -v docker >/dev/null 2>&1; then
+        df_log_info "Docker: System Prune..."
+        docker system prune -af --volumes >/dev/null 2>&1 && df_log_success "Docker pruned"
+    elif command -v podman >/dev/null 2>&1; then
+        df_log_info "Podman: System Prune..."
+        podman system prune -af >/dev/null 2>&1 && df_log_success "Podman pruned"
     fi
 
-    df_log_success "System-Wartung abgeschlossen."
+    # 4. FAIL2BAN
+    if command -v fail2ban-client >/dev/null 2>&1; then
+        if fail2ban-client ping >/dev/null 2>&1; then
+            df_log_success "fail2ban ist aktiv"
+        else
+            df_log_warn "fail2ban Dienst reagiert nicht"
+        fi
+    fi
+
+    # 5. LOCATE DB
+    if command -v updatedb >/dev/null 2>&1; then
+        df_log_info "Locate: updatedb..."
+        updatedb && df_log_success "Locate DB aktualisiert"
+    fi
+
+    # 6. ABSCHLUSS & LOGGING
+    df_log_success "=== Wartung erfolgreich beendet ($(date '+%H:%M:%S')) ==="
+    {
+        printf "%s: %s@%s - Wartung OK\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$(whoami)" "$(hostname)"
+    } >> /var/log/bashwartung.log 2>/dev/null || true
+
     return 0
 }

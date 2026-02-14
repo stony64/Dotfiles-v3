@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
-# FILE:         .bashprompt
-# VERSION:      1.3.4
-# DESCRIPTION:  PS1 mit Uhrzeit statt Version und Git-Erkennung.
+# FILE:          .bashprompt
+# VERSION:       1.4.1
+# DESCRIPTION:   Git-aware PS1 mit Dirty/Remote/Exit-Code
+# AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 
 # --- FARBDEFINITIONEN (PS1-Maskiert) ------------------------------------------
@@ -11,23 +12,63 @@ readonly P_GREEN='\[\e[32m\]'
 readonly P_CYAN='\[\e[36m\]'
 readonly P_YELLOW='\[\e[33m\]'
 readonly P_RED='\[\e[31m\]'
+readonly P_MAGENTA='\[\e[35m\]'
 readonly P_RESET='\[\e[0m\]'
 
-# --- FUNKTIONEN ---------------------------------------------------------------
-
+# --- GIT PROMPT (Erweitert) ---------------------------------------------------
+# --- GIT PROMPT (Erweitert) ---------------------------------------------------
 df_prompt_git() {
-    local branch
+    [[ ! -d .git && ! -d ../.git ]] && return 0  # Kein Git
+
+    local branch dirty remote ahead behind
     branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
-    [[ -n "$branch" ]] && printf " (%s)" "$branch"
+    [[ -n "$branch" ]] || return 0
+
+    # Dirty Status (performant)
+    [[ -n "$(git status --porcelain --ignore-submodules 2>/dev/null)" ]] && dirty="${P_YELLOW}*" || dirty=""
+
+    # Remote (origin/main)
+    remote=$(git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>/dev/null 2>&1 | cut -d/ -f1)
+    [[ -n "$remote" ]] && remote=" ${P_CYAN}${remote:0:3}"
+
+    # Ahead/Behind (optional)
+    ahead=$(git rev-list --right-only --count "@{u}..HEAD" 2>/dev/null || echo 0)
+    behind=$(git rev-list --left-only --count "HEAD..@{u}" 2>/dev/null || echo 0)
+
+    # FIX SC2059: Variablen gehören nicht in den Format-String
+    if [[ "$ahead" -gt 0 || "$behind" -gt 0 ]]; then
+        local ahead_str="${ahead:++${ahead}}"
+        local behind_str="${behind:--${behind}}"
+        printf ' %s%s%s' "${P_MAGENTA}" "$ahead_str" "$behind_str"
+    fi
+
+    # FIX SC2059: Alle Variablen als Argumente übergeben
+    printf ' %s%s%s%s%s' "${P_YELLOW}" "$branch" "$dirty" "$remote" "${P_RESET}"
 }
 
-# --- DYNAMISCHE FARBE FÜR USER ------------------------------------------------
+# --- DYNAMISCHE FARBE FÜR USER/HOST -------------------------------------------
 USER_COLOR="$P_GREEN"
+HOST_COLOR="$P_CYAN"
 [[ $EUID -eq 0 ]] && USER_COLOR="$P_RED"
+[[ "$HOSTNAME" == *proxmox* || "$HOSTNAME" == *pve* ]] && HOST_COLOR="$P_GREEN"
 
-# --- PROMPT-KONFIGURATION -----------------------------------------------------
-# \t = Uhrzeit (HH:MM:SS)
-# \u = User, \h = Host, \w = Pfad
-PS1="${P_CYAN}[\t] ${USER_COLOR}\u${P_RESET}@\h:${P_BLUE}\w${P_YELLOW}\$(df_prompt_git)${P_RESET}\$ "
+# --- EXIT-CODE INDICATOR ------------------------------------------------------
+# Wir nutzen eine Funktion für PROMPT_COMMAND, das ist sauberer als ein String
+set_prompt_exit_code() {
+    local EXIT_CODE=$?
+    if [[ $EXIT_CODE -ne 0 ]]; then
+        EXIT_IND="${P_RED}✘${P_RESET}"
+    else
+        EXIT_IND=""
+    fi
+}
+PROMPT_COMMAND="set_prompt_exit_code"
 
+# --- PROMPT (Multi-Line) ------------------------------------------------------
+# Wir verwenden Double Quotes und escapen das $, damit $EXIT_IND
+# und $(df_prompt_git) bei jedem Tastendruck neu berechnet werden.
+PS1="${P_CYAN}[${P_BLUE}\t${P_CYAN}] ${USER_COLOR}\u${P_RESET}@${HOST_COLOR}\h${P_RESET}:${P_BLUE}\w\$(df_prompt_git)
+\${EXIT_IND}\$ ${P_RESET}"
+
+# Export separat halten, um SC2090 zu vermeiden
 export PS1

@@ -1,55 +1,89 @@
 # ------------------------------------------------------------------------------
-# FILE:        .nanorc
-# VERSION:     1.4.0
-# DESCRIPTION: Optimiert für Nano 8.4+ (Debian) mit modernen Shortcuts.
+# FILE:          .nanorc
+# VERSION:       1.5.0
+# DESCRIPTION:   Nano 8.4+
+# AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 
-# --- 1. EDITOR-VERHALTEN & FORMATIERUNG ---------------------------------------
-set autoindent          # Einrückung der vorherigen Zeile beibehalten
-set tabsize 4           # Tabulator-Breite auf 4 Zeichen
-set tabstospaces        # Tabs in Leerzeichen umwandeln
-set softwrap            # Visueller Zeilenumbruch (kein harter Break)
-set atblanks            # Umbruch bevorzugt an Wortgrenzen
-set zap                 # Backspace löscht markierte Blöcke sofort
-set noconvert           # Zeilenenden beim Öffnen nicht automatisch wandeln
-set locking             # .swp Dateien zur Sperrung nutzen
-set jumpyscrolling      # Scrollt zeilenweise statt halbseitenweise (flüssiger)
+# --- 1. EDITOR CORE -----------------------------------------------------------
+set autoindent
+set tabsize 4
+set tabstospaces
+set softwrap
+set atblanks
+set zap
+set noconvert
+set locking
+set jumpyscrolling
+set smooth             # Flüssiger Scroll
 
-# --- 2. INTERFACE (UI) & VISUALS ----------------------------------------------
-set linenumbers         # Permanente Zeilennummern
-set constantshow        # Cursor-Position permanent anzeigen
-set indicator           # Scrollbar rechts einblenden
-set minibar             # Kompakte Statusleiste (mehr Platz für Text)
-set stateflags          # Zeigt Modifikationen (Sternchen) an
-set showcursor          # Cursor auch in Menüs sichtbar machen
-set emptyline           # Zusätzliche Leerzeile unter der Titelzeile für Fokus
+# --- 2. UI/STATUS -------------------------------------------------------------
+set linenumbers
+set constantshow
+set indicator
+set minibar
+set stateflags
+set showcursor
+set emptyline
+set mouse              # Maus-Support (optional)
 
-# --- 3. HISTORIE & POSITIONIERUNG ---------------------------------------------
-set historylog          # Such- und Ersetzungs-Historie speichern
-set positionlog         # Letzte Cursor-Position merken
+# --- 3. HISTORY/POSITION ------------------------------------------------------
+set historylog
+set positionlog
+set searchagain        # N+ Suchen wiederholen
 
-# --- 4. SYNTAX-HIGHLIGHTING ---------------------------------------------------
-# Systemweite Definitionen laden
+# --- 4. SYNTAX (System + Custom) ----------------------------------------------
 include "/usr/share/nano/*.nanorc"
-# Optionale Benutzer-Definitionen laden
 include "~/.nano/*.nanorc"
 
-# --- 5. MODERN BINDINGS (SHORTCUTS) -------------------------------------------
-# Hinweis: Erfordert 'stty -ixon' in der .bashrc für Strg+S/Q Support.
-bind M-C copy main      # Alt+C:  Kopieren
-bind M-V paste all      # Alt+V:  Einfügen
-bind ^F whereis all     # Strg+F: Suchen
-bind ^H replace main    # Strg+H: Ersetzen
-bind ^S savefile main   # Strg+S: Speichern
-bind ^Q exit all        # Strg+Q: Beenden
-bind ^Z undo main       # Strg+Z: Rückgängig
-bind ^Y redo main       # Strg+Y: Wiederholen
-bind ^D zap main        # Strg+D: Löschen (Zeichen/Block)
+# --- 5. PROXMOX/ZFS SYNTAX ----------------------------------------------------
+syntax "proxmox" [\.(pve|conf|cfg|qm|pct|vzctl)$]
+color brightblue "^(pct|qm|pvesh|)\s+\d+.*"
+color brightgreen "vmid:\s+\d+|status:\s+(running|stopped)"
+color yellow      "(memory|cpu|disk):\s+\S+"
+color brightmagenta "^node\s+:\s+\S+"
 
-# --- 6. DESIGN (FARBSCHEMA) ---------------------------------------------------
-set titlecolor black,cyan     # Titelzeile (Oben)
-set statuscolor black,cyan    # Statuszeile (Unten)
-set keycolor white,blue       # Tastenkombinationen
-set numbercolor yellow,normal # Zeilennummern
-set errorcolor white,red      # Fehlermeldungen
-set selectedcolor black,white # Markierter Text
+syntax "zfs" [\.?(zfs|pool|dataset)\.(conf|log)?$]
+color brightcyan  "^(pool|dataset):\s+\S+"
+color brightyellow "USED\s+[0-9GMTP]+"
+color brightgreen  "AVAIL\s+[0-9GMTP]+"
+color brightmagenta "MOUNTPOINT\s+(/\S+)"
+
+# --- 6. DOTFILES FRAMEWORK SYNTAX ---------------------------------------------
+syntax "dotfiles" [\.(sh|bashrc|bashaliases|bashfunctions|nanorc|dircolors|core\.sh|dctl)$]
+color brightgreen "^(alias|function|df_|export\s+DF_)"
+color yellow      "^df_log_(info|success|error|warn)"
+color brightblue  "# --- .* ---"
+color cyan        "(DF_REPO_ROOT|DF_PROJECT_VERSION)"
+
+# --- 7. MODERN BINDINGS (stty -ixon erforderlich!) ----------------------------
+bind M-C copy main          # Alt+C: Copy
+bind M-V paste all          # Alt+V: Paste
+bind ^F whereis all         # Strg+F: Find
+bind ^H replace main        # Strg+H: Replace
+bind ^S savefile main       # Strg+S: Save
+bind ^Q exit all            # Strg+Q: Quit
+bind ^Z undo main           # Strg+Z: Undo
+bind ^Y redo main           # Strg+Y: Redo
+bind ^G execute "linter" main  # Strg+G: Linter
+bind M-G cut main           # Alt+G: Cut Line
+bind ^K uncut main          # Strg+K: Uncut
+bind ^L justify main        # Strg+L: Reformat
+bind M-S suspend main       # Alt+S: Suspend
+
+# --- 8. ULTIMATE COLORS (256-Farben) ------------------------------------------
+set titlecolor brightwhite,blue
+set statuscolor black,cyan
+set keycolor brightwhite,blue
+set numbercolor brightyellow,normal
+set errorcolor brightwhite,brightred
+set scursorcolor brightwhite,blue
+set selectedcolor black,brightwhite
+set functioncolor brightcyan,normal
+set stringcolor brightgreen,normal
+set commentator brightwhite,normal
+set keywordcolor brightyellow,normal
+
+# --- 9. PERFORMANCE -----------------------------------------------------------
+set suspendenable           # Strg+Z Suspend
+set boldtext                # Bold überall

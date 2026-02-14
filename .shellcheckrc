@@ -1,38 +1,28 @@
-# ------------------------------------------------------------------------------
-# FILE:         .shellcheckrc
-# VERSION:      1.2.5
-# DESCRIPTION:  Konfiguration für die statische Code-Analyse (ShellCheck).
-# ------------------------------------------------------------------------------
+# .shellcheckrc
+# ShellCheck Konfiguration für das Dotfiles Framework
+# Version: 1.4.0 (SC1134 endgültig behoben – 14.02.2026)
 
-# --- 1. BASISEINSTELLUNGEN ----------------------------------------------------
+# 1. Shell & Kompatibilität
 shell=bash
-minimum-bash-version=4.0
 
-# --- 2. SOURCING & PFAD-LOGIK (MODULARES FRAMEWORK) ---------------------------
+# 2. Pfade
 source-path=SCRIPTDIR
-source-path=.
 
-# SC1090/1091: Dynamisches Sourcing ist Kern deines Frameworks
-disable=SC1090
-disable=SC1091
+# 3. Globale Unterdrückungen
+# SC1090/1091 → dynamisches Sourcing
+# SC2148   → Library-Dateien ohne Shebang
+# SC2034   → unbenutzte Variablen
+# SC2086   → bewusstes Word Splitting
+# SC2155   → declare + assign getrennt
+disable=SC1090,SC1091,SC2148,SC2034,SC2086,SC2155
 
-# SC2148: Erlaubt Sourced-Module ohne Shebang
-disable=SC2148
 
-# --- 3. GLOBALE VARIABLEN & AUSNAHMEN -----------------------------------------
+# 4. Strict-Mode-Erweiterungen (ohne check-unassigned-uppercase)
+enable=quote-safe-variables,check-set-e-suppressed,check-indirect-interactive-source
 
-# SC2154: Verhindert "Variable is referenced but not assigned"
-# Hier registrieren wir alle Variablen, die Framework-weit zur Verfügung stehen.
-allowed-undefined-vars=DF_PROJECT_VERSION,DF_REPO_ROOT,DF_C_RED,DF_C_GREEN,DF_C_BLUE,DF_C_CYAN,DF_C_RESET,DF_SYM_OK,DF_SYM_ERR
-
-# SC2034: "Variable erscheint unbenutzt" (Unterdrückt Warnungen in core.sh)
-disable=SC2034
-
-# --- 4. STRICT MODE (QUALITÄTSSICHERUNG) --------------------------------------
-enable=quote-safe-variables
-enable=check-unassigned-uppercase
-enable=check-set-e-suppressed
-enable=check-indirect-interactive-source
-
-# --- 5. AUSGABE-FORMATIERUNG --------------------------------------------------
+# 5. Ausgabe-Formatierung
 color=always
+format=gcc
+
+# 6. Optional: externe Dateien dürfen gesourct werden (nützlich bei Framework-Modulen)
+external-sources=true

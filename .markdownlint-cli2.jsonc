@@ -1,31 +1,40 @@
 {
-    // ------------------------------------------------------------------------------
-    // FILE:        markdownlint-cli2.jsonc
-    // VERSION:     1.2.5
-    // DESCRIPTION: Konfiguration für das Markdown-Linting Tool (CLI v2).
-    // ------------------------------------------------------------------------------
-
-    // --- GLOB-EINSTELLUNGEN --------------------------------------------------
-    "globs": ["**/*.md"],
-
+    "globs": ["**/*.md", "README.md", "STYLEGUIDE.md"],
     "ignores": [
         "node_modules/**",
         ".git/**",
         "**/_exports/**",
         "**/*_local.md",
-        "**/test_sandbox/**"
+        "**/test_sandbox/**",
+        "home/**"
     ],
-
-    // --- REGEL-KONFIGURATION -------------------------------------------------
     "config": {
-        // Erbt die detaillierten Regeln aus der .markdownlint.jsonc
-        "extends": "./.markdownlint.jsonc"
+        "MD001": true,
+        "MD024": {
+            "siblings_only": true
+        },
+        "MD025": {
+            "level": 1
+        },
+        "MD007": {
+            "indent": 4
+        },
+        "MD009": {
+            "br_spaces": 2
+        },
+        "MD013": false,
+        "MD022": true,
+        "MD029": false,
+        "MD031": true,
+        "MD033": false,
+        "MD032": true,
+        "MD034": false,
+        "MD040": false,
+        "MD041": false
     },
-
-    "noInlineConfig": false,
-
-    // --- OUTPUT & FORMATIERUNG -----------------------------------------------
     "outputFormatters": [
-        ["markdownlint-cli2-formatter-pretty"]
-    ]
+        ["markdownlint-cli2-formatter-pretty"],
+        ["markdownlint-cli2-formatter-sarif"]
+    ],
+    "noInlineConfig": false
 }

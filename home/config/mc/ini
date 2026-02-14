@@ -1,11 +1,12 @@
 # ------------------------------------------------------------------------------
-# FILE:        home/config/mc/ini
-# VERSION:     1.4.2
-# DESCRIPTION: Zentrale Midnight Commander Konfiguration (v4.8.33).
+# FILE:          home/config/mc/ini
+# VERSION:       1.5.0
+# DESCRIPTION:   Midnight Commander INI
+# AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 
 [Midnight-Commander]
-# --- KERN-EINSTELLUNGEN -------------------------------------------------------
+# --- CORE ---------------------------------------------------------------------
 shell_patterns=true
 auto_save_setup=true
 use_internal_view=true
@@ -14,18 +15,17 @@ clear_before_exec=true
 preallocate_space=false
 verbose=true
 
-# --- SICHERHEIT & BESTÄTIGUNGEN -----------------------------------------------
+# --- SAFETY -------------------------------------------------------------------
 confirm_delete=true
 confirm_overwrite=true
 confirm_execute=false
 confirm_history_cleanup=true
 confirm_exit=true
 confirm_directory_hotlist_delete=false
-confirm_view_dir=false
 safe_delete=false
 safe_overwrite=false
 
-# --- INTERFACE-VERHALTEN ------------------------------------------------------
+# --- UI/UX --------------------------------------------------------------------
 auto_menu=false
 pause_after_run=1
 old_esc_mode=true
@@ -33,24 +33,19 @@ old_esc_mode_timeout=1000000
 cd_symlinks=true
 show_all_if_ambiguous=false
 use_file_to_guess_type=true
-alternate_plus_minus=false
-only_leading_plus_minus=true
-show_output_starts_shell=false
-xtree_mode=false
-nice_rotating_dash=true
 shadows=true
 auto_fill_mkdir_name=true
 
-# --- MAUS-STEUERUNG -----------------------------------------------------------
+# --- MOUSE --------------------------------------------------------------------
 mouse_move_pages_viewer=true
 mouse_close_dialog=false
 mouse_repeat_rate=100
 double_click_speed=250
 
-# --- EDITOR & ANZEIGE ---------------------------------------------------------
-editor_tab_spacing=8
-editor_fill_tabs_with_spaces=false
-editor_return_does_auto_indent=false
+# --- EDITOR -------------------------------------------------------------------
+editor_tab_spacing=4
+editor_fill_tabs_with_spaces=true
+editor_return_does_auto_indent=true
 editor_option_save_position=true
 editor_syntax_highlighting=true
 editor_persistent_selections=true
@@ -61,7 +56,7 @@ editor_state_full_filename=true
 skin=gotar
 
 [Layout]
-# --- VISUELLE STRUKTUR --------------------------------------------------------
+# --- PANELS -------------------------------------------------------------------
 menubar_visible=true
 keybar_visible=true
 command_prompt=true
@@ -70,11 +65,11 @@ free_space=true
 message_visible=true
 horizontal_split=false
 vertical_equal=true
-left_panel_size=89
-output_lines=0
+left_panel_size=0.35
+output_lines=6
 
 [Panels]
-# --- DATEILISTEN-VERHALTEN ----------------------------------------------------
+# --- FILE LISTS ---------------------------------------------------------------
 show_dot_files=true
 show_backups=true
 show_mini_info=true
@@ -84,24 +79,59 @@ navigate_with_arrows=true
 panel_scroll_pages=true
 quick_search_mode=2
 mix_all_files=false
-kilobyte_si=false
+kilobyte_si=true
 filetype_mode=true
 
 [Misc]
-# --- LOKALISIERUNG & ZEIT -----------------------------------------------------
-timeformat_recent=%d. %b %H:%M
-timeformat_old=%d. %b %Y
+# --- TIME/LOCALE --------------------------------------------------------------
+timeformat_recent=%d.%b %H:%M
+timeformat_old=%d.%b %Y
 display_codepage=UTF-8
-source_codepage=Other_8_bit
+source_codepage=UTF-8
 
 [Panelize]
-# --- EIGENE SUCHE-SKRIPTE -----------------------------------------------------
-Geänderte Git-Dateien=git ls-files --modified
+# --- CORE SEARCHES ------------------------------------------------------------
+Geänderte Git-Dateien=git ls-files --modified --exclude-standard
 Nach *.orig nach dem Patchen suchen=find . -name \*.orig -print
-Nach dem Patchen nach Ablehnungen suchen=find . -name \*.rej -print
-SUID- und SGID-Programme suchen=find . \( \( -perm -04000 -a -perm /011 \) -o \( -perm -02000 -a -perm /01 \) \) -print
-# --- NEUE ERGÄNZUNGEN ---
-Große Dateien (>100MB)=find . -type f -size +100M -print
-Dateien der letzten 24h=find . -type f -mtime -1 -print
-Leere Verzeichnisse finden=find . -type d -empty -print
-Web-Dateien (HTML/CSS/JS)=find . -type f \( -name "*.html" -o -name "*.css" -o -name "*.js" \) -print
+Nach Ablehnungen suchen=find . -name \*.rej -print
+SUID/SGID=find . \( -perm -4000 -o -perm -2000 \) -ls
+Große Dateien (>100MB)=find . -type f -size +100M -exec ls -lh {} \;
+Dateien letzte 24h=find . -type f -mtime -1 -printf '%TY-%Tm-%Td %TT %p\n' | sort -r
+Leere Verzeichnisse=find . -type d -empty -print
+
+# --- PROXMOX (CT/VM/ZFS) ------------------------------------------------------
+Proxmox VMs=qm list | awk 'NR>1{print $1" "$(NF-1)}'
+Proxmox CTs=pct list | awk 'NR>1{print $1" "$(NF-1)}'
+ZFS Datasets=zfs list -Ho name,mountpoint,used,avail -r | grep -v '^NAME'
+Proxmox Configs=find /etc/pve -name "*.conf" -type f 2>/dev/null
+pvetm Status=pvetm status --plain
+
+# --- DOCKER/PODMAN -----------------------------------------------------------
+Docker Images=docker images | awk 'NR>2{print $1":"$2}'
+Docker Containers=docker ps -a --format "table {{.ID}}\t{{.Names}}\t{{.Status}}"
+Podman Containers=podman ps -a --format "table {{.ID}}\t{{.Names}}\t{{.Status}}"
+
+# --- DEV/DOTFILES -------------------------------------------------------------
+Dotfiles=find $HOME -maxdepth 3 -name ".*" -not -path '*/.git*' -printf '%p\n' | sort
+Shell Scripts=find . -name "*.sh" -type f -executable -printf '%TY-%Tm-%Td %TT %p\n' | sort -r
+Config Files=find /etc -name "*.conf" -o -name "*.cfg" 2>/dev/null | head -50
+Web Files=find . \( -name "*.html" -o -name "*.css" -o -name "*.js" -o -name "*.ts" \) -print
+Git Changed=git ls-files --modified --others --exclude-standard
+
+# --- PI-HOLE/DNS --------------------------------------------------------------
+Pi-hole Logs=find /var/log -name "*pihole*" -mmin -1440 2>/dev/null
+DNS Configs=find /etc -name "unbound.conf*" -o -name "dnsmasq.conf*" 2>/dev/null
+
+[Colors]
+# --- MODERN DARK THEME -------------------------------------------------------
+directory=brightcyan
+executable=brightgreen
+selected=bold,brightwhite
+markselect=underline,brightmagenta
+errors=brightred
+status=brightwhite,blue
+menu=brightwhite,blue
+menuhot=brightcyan,blue
+dialog=brightwhite,blue
+input=brightwhite,blue
+gauge=brightblack,brightcyan

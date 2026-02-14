@@ -1,56 +1,64 @@
 # ------------------------------------------------------------------------------
-# FILE:        .gitattributes
-# VERSION:     1.2.4
-# DESCRIPTION: Erzwingung korrekter Zeilenenden (LF) und Binär-Handling.
+# FILE:          .gitattributes
+# VERSION:       1.3.0
+# DESCRIPTION:   Line-Endings + Binary Policy (Proxmox/Dotfiles/LaTeX + exec).
+# AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 
-# --- 1. GLOBALER STANDARD -----------------------------------------------------
-# Automatische Texterkennung für alle Dateien als Fallback.
-* text=auto
-# --- 2. SHELL-SKRIPTE & DOTFILES (ERZWINGE LF) --------------------------------
-*.sh             text eol=lf
-.bash*           text eol=lf
-.dircolors       text eol=lf
-.nanorc          text eol=lf
-# Falls Dateien ohne Punkt im Repo sind (z.B. in Templates):
-# bashrc           text eol=lf
-# bashaliases      text eol=lf
+# --- GLOBAL AUTO DETECT + LF DEFAULT ------------------------------------------
+* text=auto eol=lf
 
-# --- 3. KONFIGURATION & DATA (ERZWINGE LF) ------------------------------------
-*.json           text eol=lf
-*.jsonc          text eol=lf
-*.yml            text eol=lf
-*.yaml           text eol=lf
-*.toml           text eol=lf
-*.conf           text eol=lf
-*.ini            text eol=lf
-.editorconfig    text eol=lf
-.gitignore       text eol=lf
-.gitattributes   text eol=lf
-.shellcheckrc    text eol=lf
-# Erfasst .markdownlint.jsonc UND markdownlint-cli2.jsonc
-*markdownlint* text eol=lf
+# --- SHELL/DOTFILES FRAMEWORK (EXECUTABLE + LF) -------------------------------
+*.sh                text eol=lf exec
+.bash*              text eol=lf
+dotfilesctl.sh      text eol=lf exec
+core.sh             text eol=lf exec
+.dircolors          text eol=lf
+.nanorc             text eol=lf
+.shellcheckrc       text eol=lf
+.bashwartung        text eol=lf exec
 
-# --- 4. DOKUMENTATION & PROJEKT-DATEIEN (ERZWINGE LF) -------------------------
-*.md              text eol=lf
-*.txt             text eol=lf
-project-words.txt text eol=lf
-LICENSE           text eol=lf
-README            text eol=lf
+# --- CONFIGURATION (LF) -------------------------------------------------------
+*.{json,jsonc,yaml,yml,toml,conf,cfg,ini} text eol=lf
+.editorconfig       text eol=lf
+.gitignore          text eol=lf
+.gitattributes      text eol=lf
+*markdownlint*      text eol=lf
+bindings.json       text eol=lf
+settings.json       text eol=lf
 
-# --- 5. BINÄRDATEIEN (KEINE TRANSFORMATION) ----------------------------------
-*.png             binary
-*.jpg             binary
-*.jpeg            binary
-*.gif             binary
-*.ico             binary
-*.webp            binary
-*.pdf             binary
-*.zip             binary
-*.7z              binary
-*.gz              binary
-*.tgz             binary
+# --- DOCUMENTATION (LF) -------------------------------------------------------
+*.{md,txt,mdx}      text eol=lf
+project-words.txt   text eol=lf
+LICENSE             text eol=lf
+README*             text eol=lf
+CHANGELOG*          text eol=lf
 
-# --- 6. WINDOWS-SPEZIFISCHE DATEIEN (ERZWINGE CRLF) ---------------------------
-*.bat             text eol=crlf
-*.ps1             text eol=crlf
+# --- PROXMOX/MC/ZFS (CONFIG + DATA) -------------------------------------------
+*.pve               text eol=lf
+mc/ini              text eol=lf
+*.conf.d            text eol=lf
+*.zfs               binary
+*.pool              binary
+
+# --- LATEX (LF) ---------------------------------------------------------------
+*.{tex,latex}       text eol=lf
+
+# --- WINDOWS FILES (CRLF) -----------------------------------------------------
+*.{bat,ps1,cmd}     text eol=crlf
+
+# --- MAKEFILES (TAB HEILIG!) --------------------------------------------------
+[{Makefile,makefile,*.mk}] indent_style=tab indent_size=8 trim_trailing_whitespace=false
+
+# --- BINARY/MEDIA (NO TRANSFORM) ----------------------------------------------
+*.{png,jpg,jpeg,gif,webp,ico,svg,pdf,zip,7z,gz,tgz,lz4,rar,deb,rpm,AppImage,snap} binary
+Cargo.lock          text eol=lf
+package-lock.json   binary
+yarn.lock           text eol=lf
+
+# --- DEV TOOLS (LOCKFILES) ----------------------------------------------------
+*.lock              binary
+.env.*              text eol=lf
+
+# --- GIT HUB ACTIONS ----------------------------------------------------------
+.github/workflows/*.yml text eol=lf

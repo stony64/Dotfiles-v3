@@ -1,53 +1,103 @@
-# ... (Trigger und Test-Job bleiben gleich)
+# ------------------------------------------------------------------------------
+# FILE:          .github/workflows/release.yml
+# VERSION:       1.2.0
+# DESCRIPTION:   Auto GitHub Release mit Version aus core.sh
+# AUTHOR:        Stony64
+# ------------------------------------------------------------------------------
 
-release:
-    name: Create GitHub Release
-    needs: test
+name: "🏷️ Create Release"
+
+on:
+  push:
+    tags:
+      - "v*"
+    paths:
+      - "core.sh"
+      - "dotfilesctl.sh"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Manuelle Version (Fallback)'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    name: "🚀 Publish Release"
     runs-on: ubuntu-latest
-    permissions:
-        contents: write
+    needs: [lint-markdown, test]  # Vorherige Checks
 
     steps:
-        - name: 📥 Checkout Repository
-          uses: actions/checkout@v4
-          with:
-              fetch-depth: 0
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
-        - name: 🏷 Extract Version from Code
-          id: meta
-          shell: bash
-          run: |
-              # Sucht nach DF_PROJECT_VERSION="X.Y.Z" in core.sh
-              # Nutzt sed, um nur den Wert zwischen den Anführungszeichen zu isolieren
-              RAW_VER=$(grep 'DF_PROJECT_VERSION=' core.sh | sed -e 's/.*="//' -e 's/".*//')
+      - name: 🏷️ Extract Version
+        id: meta
+        shell: bash
+        run: |
+          # Robust Version aus core.sh
+          RAW_VER=$(awk -F'"' '/DF_PROJECT_VERSION=/{print $2; exit}' core.sh 2>/dev/null)
+          VERSION="${RAW_VER:-${{ github.ref_name }}-${{ github.event.inputs.version }}}"
 
-              # Fallback, falls grep fehlschlägt
-              VERSION=${RAW_VER:-${{ github.ref_name }}}
-              echo "DF_VER=$VERSION" >> $GITHUB_OUTPUT
-              echo "Extrahiert: $VERSION"
+          echo "DF_VER=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_STEP_SUMMARY
 
-        - name: 🚀 Publish GitHub Release
-          uses: softprops/action-gh-release@v2
-          with:
-              tag_name: ${{ github.ref_name }}
-              # Nutzt die dynamische Version im Titel
-              name: "Dotfiles Framework v${{ steps.meta.outputs.DF_VER }}"
-              body: |
-                  ## 🛠 Dotfiles Framework v${{ steps.meta.outputs.DF_VER }} (Stable)
+          if [[ "$VERSION" != "${{ github.ref_name }}"* ]]; then
+            echo "::warning::Code v$RAW_VER ≠ Tag ${{ github.ref_name }}"
+          fi
 
-                  Automatisiertes Release basierend auf dem Git-Tag: **${{ github.ref_name }}**.
-                  Interner Framework-Status: **v${{ steps.meta.outputs.DF_VER }}**.
+      - name: 🚀 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Dotfiles Framework v${{ steps.meta.outputs.DF_VER }}"
+          body: |
+            ## 🛠️ **Dotfiles Framework v${{ steps.meta.outputs.DF_VER }}**
 
-                  ### 📋 Release Checkliste (CI):
-                  - ✅ **ShellCheck:** Bestanden (Style-Guide v1.4.2).
-                  - ✅ **Versions-Match:** Code und Release-Tag synchronisiert.
+            **Tag**: `${{ github.ref_name }}` | **Code**: `${{ steps.meta.outputs.DF_VER }}`
 
-                  ### 📦 Installation:
-                  ```bash
-                  sudo git clone ${{ github.server_url }}/${{ github.repository }} /opt/dotfiles
-                  sudo /opt/dotfiles/dotfilesctl.sh install "$USER"
-                  ```
+            ### ✅ CI Status
+            | Check | Status |
+            |-------|--------|
+            | ShellCheck | ✅ |
+            | Markdown | ${{ needs.lint-markdown.result }} |
+            | Tests | ${{ needs.test.result }} |
 
-                  ---
-                  *Dieses Release wurde dynamisch generiert.*
-              generate_release_notes: true
+            ### 📦 Quick Install
+            ```bash
+            sudo git clone --depth=1 https://github.com/${{ github.repository }} /opt/dotfiles
+            sudo /opt/dotfiles/dotfilesctl.sh install $USER
+            source ~/.bashrc
+            ```
+
+            ### 🔗 Assets
+            - [dotfilesctl.sh](dotfilesctl.sh)
+            - [core.sh](core.sh)
+            - [Full Repo](https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.zip)
+
+            ---
+            *Auto-generated Release*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') }}
+
+      - name: 📊 Summary
+        if: always()
+        run: |
+          echo "### Release ${{ job.status }}"
+          echo "**Version:** ${{ steps.meta.outputs.DF_VER || 'N/A' }}"
+          echo "**Tag:** ${{ github.ref_name }}"
+          echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }})"

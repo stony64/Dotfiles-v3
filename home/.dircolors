@@ -1,59 +1,137 @@
 # ------------------------------------------------------------------------------
-# FILE:        .dircolors
-# VERSION:     1.2.3
-# DESCRIPTION: Farbedefinitionen für ls und andere GNU-Utilities.
+# FILE:          .dircolors
+# VERSION:       1.3.0
+# DESCRIPTION:   LS-Farben
+# AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 
-# --- GLOBAL SETTINGS ----------------------------------------------------------
+# --- GLOBAL TERM SUPPORT ------------------------------------------------------
 TERM xterm
 TERM xterm-256color
 TERM screen
 TERM screen-256color
+TERM tmux
 TERM linux
+TERM kitty
+TERM alacritty
 
-# --- BASIS-FARBEN (ANSI) ------------------------------------------------------
-# 00=Default, 01=Bold, 04=Underline, 05=Blink, 31=Red, 32=Green, 33=Yellow, 34=Blue
-# 35=Magenta, 36=Cyan, 37=White
+# --- ANSI BASE (Bold/Background/Security) -------------------------------------
 RESET 0
-DIR 01;34       # Verzeichnisse: Bold Blue
-LINK 01;36      # Symlinks: Bold Cyan
+DIR 01;34                           # Verzeichnisse: Bold Blue
+LINK 01;36                          # Symlinks: Bold Cyan
 MULTIHARDLINK 00
 FIFO 40;33
 SOCK 01;35
 DOOR 01;35
-BLK 40;33;01
-CHR 40;33;01
-ORPHAN 40;31;01 # Verwaiste Links: Red Background
-MISSING 00
-SETUID 37;41
-SETGID 30;43
-CAPABILITY 30;41
-STICKY_OTHER_WRITABLE 30;42
-OTHER_WRITABLE 34;42
-STICKY 37;44
+BLK 40;33;01                        # Block: Yellow BG Bold
+CHR 40;33;01                        # Char: Yellow BG Bold
+ORPHAN 40;31;01                     # Broken Links: Red BG
+MISSING 00;00;01                    # Missing: Bold Default
+SETUID 37;41                        # SUID: Red BG White
+SETGID 30;43                        # SGID: Yellow BG Black
+CAPABILITY 30;41                    # Caps: Red BG Black
+STICKY_OTHER_WRITABLE 30;42         # Sticky Writable: Green BG Black
+OTHER_WRITABLE 34;42                # Writable: Green BG Blue
+STICKY 37;44                        # Sticky: Blue BG White
 
-# --- DATEIENDUNGEN (LOGIK) ----------------------------------------------------
-
-# Archive (Rot/Orange)
+# --- ARCHIVE (Red/Orange) -----------------------------------------------------
 .tar 01;31
 .tgz 01;31
+.tar.gz 01;31
+.tar.bz2 01;31
+.tbz2 01;31
+.tar.xz 01;31
+.txz 01;31
+.tar.zst 01;31
 .zip 01;31
-.gz  01;31
-.7z  01;31
+.7z 01;31
+.rar 01;31
+.lz4 01;31
 
-# Bilder & Medien (Magenta)
-.jpg  01;35
-.png  01;35
-.gif  01;35
+# --- IMAGES/MEDIA (Magenta) ---------------------------------------------------
+.jpg 01;35
+.jpeg 01;35
+.png 01;35
+.gif 01;35
 .webp 01;35
-.mp4  01;35
+.svg 01;35
+.mp4 01;35
+.mkv 01;35
+.mp3 01;35
+.flac 01;35
 
-# Dokumente (Gelb/Weiß)
-.txt  00
-.md   01;33
-.pdf  00;32
+# --- DOCS (Green/Yellow) ------------------------------------------------------
+.pdf 00;32
+.doc 00;32
+.docx 00;32
+.txt 00
+.md 01;33
+.rst 01;33
+.org 01;33
 
-# Skripte & Binaries (Grün)
-.sh   01;32
+# --- SCRIPTS/CODE (Green/Cyan) ------------------------------------------------
+.sh 01;32
 .bash 01;32
-.py   01;32
+.zsh 01;32
+.fish 01;32
+.py 01;32
+.rb 01;32
+.lua 01;32
+.php 01;32
+.c 01;36
+.cpp 01;36
+.h 01;36
+.rs 01;32
+.go 01;32
+.java 01;32
+.js 01;36
+.ts 01;36
+.jsx 01;36
+.tsx 01;36
+
+# --- CONFIG (Blue/Cyan) -------------------------------------------------------
+.conf 00;36
+.cfg 00;36
+.ini 00;36
+.json 00;36
+.jsonc 00;36
+.toml 01;33
+.yaml 01;33
+.yml 01;33
+.xml 00;36
+.env 40;33                       # Env: Yellow BG
+.DS_Store 40;31                  # Mac: Red BG
+
+# --- DEV/TOOLS (Magenta/Yellow) -----------------------------------------------
+.nix 35                          # Nix
+.Dockerfile 01;34
+.dockerignore 01;31
+.kubeconfig 40;36                # K8s: Cyan BG
+.helm 01;34
+.terraform 01;34
+.gitignore 00;36
+
+# --- PROXMOX/ZFS (Blue/Green) -------------------------------------------------
+.pve 01;34                       # Proxmox Config
+.vzctl 01;35
+.zfs 40;33                       # ZFS Pool
+.conf.d 01;34
+.log 00;37                       # Logs White
+.bak 40;31                       # Backup Red BG
+.bak_* 40;31
+.swp 40;35                       # Swap Magenta BG
+.tmp 40;37                       # Temp White BG
+
+# --- SHELL/DOTFILES (Green) ---------------------------------------------------
+.bash* 01;32
+.core.sh 01;36                   # Framework Cyan
+.dctl 01;32                      # Executable
+.zshrc 01;32
+.bashrc 01;32
+
+# --- PACKAGES (Yellow) --------------------------------------------------------
+.deb 01;33
+.rpm 01;33
+.AppImage 01;33
+.snap 01;33
+.flatpak 01;33

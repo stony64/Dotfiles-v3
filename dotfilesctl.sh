@@ -1,131 +1,190 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
 # FILE:         dotfilesctl.sh
-# VERSION:      3.1.2
-# DESCRIPTION:  Hauptsteuerung des Dotfiles-Frameworks (CLI Entrypoint).
-# TYPE:         EXECUTABLE
+# VERSION:      3.3.5
+# DESCRIPTION:  CLI-Entrypoint zur Distribution von Konfigurationsdateien.
+#               Verwaltet Symlinks für User-Home und System-Ebene (/etc).
+#               Optimiert für Debian GNU/Linux & Proxmox VE.
+# AUTHOR:       Stony64
 # ------------------------------------------------------------------------------
-
+# Technischer Hinweis: set -euo pipefail sorgt für sofortigen Abbruch bei Fehlern.
+# SC2310 wird vermieden, indem Funktionen nicht in Bedingungen aufgerufen werden.
+# ------------------------------------------------------------------------------
 set -euo pipefail
 
-# --- BOOTSTRAP ----------------------------------------------------------------
-export DF_REPO_ROOT="${DF_REPO_ROOT:-/opt/dotfiles}"
+# --- 1. KONFIGURATION & KONSTANTEN --------------------------------------------
 
-# SC2154 Fix: ShellCheck über externe Variablen informieren
-# Diese Variablen werden in core.sh definiert.
-# shellcheck disable=SC2034
-DF_PROJECT_VERSION="${DF_PROJECT_VERSION:-}"
+# Pfad zum Repository-Root (Speicherort dieses Skripts)
+readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
+readonly DOTFILES_DIR="$SCRIPT_DIR"
 
-# Sicherstellen, dass der Kern geladen wird
-if [[ -f "${DF_REPO_ROOT}/core.sh" ]]; then
-    # shellcheck source=core.sh
-    source "${DF_REPO_ROOT}/core.sh"
-else
-    printf '[ERR] Framework-Kern nicht gefunden unter %s\n' "${DF_REPO_ROOT}/core.sh" >&2
-    exit 1
-fi
+# Zeitstempel für eindeutige Backup-Verzeichnisse
+readonly TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 
-df_load_modules
+# Temporäres Backup-Verzeichnis vor der Archivierung
+readonly BACKUP_BASE="$HOME/.dotfiles-backup-$TIMESTAMP"
 
-# --- 1. KERN-LOGIK ------------------------------------------------------------
+# --- 2. HILFSFUNKTIONEN -------------------------------------------------------
 
-# ZWECK: Installiert Dotfiles für einen spezifischen User inklusive Backup-Check.
-# PARAM: $1 (String) - Username.
-# RETURN: 0 bei Erfolg, >0 bei Fehlern.
-df_install_user() {
-    local user="$1"
-    local home_dir src_dir item base_name
-
-    df_is_real_user "$user" || { df_log_error "Ungültiger oder System-User: $user"; return 1; }
-
-    home_dir=$(df_get_user_home "$user")
-    src_dir="${DF_REPO_ROOT}/home"
-
-    df_log_info "Starte Installation für User: $user ($home_dir)"
-
-    # Backup-Integration (P1)
-    if declare -f df_backup_create > /dev/null; then
-        df_backup_create "$user" || { df_log_error "Backup fehlgeschlagen! Abbruch."; return 1; }
-    fi
-
-    # Deployment-Schleife (P1/P3)
-    while read -r item; do
-        base_name=$(basename "$item")
-        df_create_link "$item" "${home_dir}/${base_name}"
-        df_set_owner "${home_dir}/${base_name}" "$user"
-    done < <(find "$src_dir" -maxdepth 1 -mindepth 1)
-
-    df_log_success "Dotfiles für $user erfolgreich installiert."
+# Zentrales Logging für Statusmeldungen (Standardfehler für saubere Pipes)
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2
 }
 
-# ZWECK: Prüft den Link-Status für einen User ohne ls-parsing (P2).
-# PARAM: $1 (String) - Username.
-# RETURN: 0
-df_status_user() {
-    local user="$1"
-    local home_dir item target
-    local found=0
+# Prüft auf Root-Berechtigungen (wichtig für System-Operationen)
+check_sudo() {
+    if [[ $EUID -ne 0 ]]; then
+        log "REQUIRED: Diese Operation erfordert sudo-Rechte."
+        return 1
+    fi
+}
 
-    home_dir=$(df_get_user_home "$user")
-    df_log_info "Status der Framework-Links für $user:"
+# Interne Funktion zum Sichern eines Pfades
+# Rückgabewert 0 (Erfolg) auch wenn Datei fehlt, um set -e nicht zu triggern.
+_internal_backup_perform() {
+    local target_path="$1"
+    local destination="$BACKUP_BASE${target_path}"
 
-    # SC2010 Fix: Nutzt Globbing statt ls | grep
-    for item in "${home_dir}"/.*; do
-        [[ -L "$item" ]] || continue
+    # Existenzprüfung intern, damit der Aufrufer keine 'if'-Bedingung braucht (SC2310)
+    if [[ -e "$target_path" ]]; then
+        mkdir -p "$(dirname "$destination")"
+        cp -a "$target_path" "$destination"
+        log "BACKUP: $target_path gesichert."
+    else
+        log "INFO: $target_path nicht vorhanden, überspringe..."
+    fi
+}
 
-        target=$(readlink -f "$item")
-        if [[ "$target" == "${DF_REPO_ROOT}"* ]]; then
-            printf '  [LINK] %s -> %s\n' "$(basename "$item")" "$target"
-            found=1
+# --- 3. KERNFUNKTIONEN --------------------------------------------------------
+
+# Erstellt eine Sicherung der aktuell aktiven Konfigurationen
+backup() {
+    log "BACKUP: Initialisiere Sicherung in $BACKUP_BASE"
+    mkdir -p "$BACKUP_BASE"
+
+    # Liste der kritischen Pfade (User & System)
+    local targets=(
+        "$HOME/.bashrc"
+        "$HOME/.bash_profile"
+        "$HOME/.gitconfig"
+        "$HOME/.tmux.conf"
+        "$HOME/.vimrc"
+        "$HOME/.config/nvim/init.vim"
+        "/etc/systemd/user/pipewire.service.d/99-proxmox.conf"
+        "/etc/zfs/zpool.cache"
+    )
+
+    # Nackter Aufruf ohne logische Verknüpfung sichert set -e Funktionalität
+    for item in "${targets[@]}"; do
+        _internal_backup_perform "$item"
+    done
+
+    # Finalisierung: Backup-Ordner in ein komprimiertes Archiv packen
+    tar czf "$HOME/dotfiles-backup-$TIMESTAMP.tar.gz" -C "$HOME" ".dotfiles-backup-$TIMESTAMP"
+    log "BACKUP: Archiv erstellt: ~/dotfiles-backup-$TIMESTAMP.tar.gz"
+
+    # Aufräumen des temporären Verzeichnisses
+    rm -rf "$BACKUP_BASE"
+}
+
+# Rollt die Symlinks aus dem Repository in das System aus
+deploy() {
+    log "DEPLOY: Starte Deployment aus $DOTFILES_DIR"
+
+    # Mapping-Array: "QUELLE:ZIEL"
+    local user_mappings=(
+        "$DOTFILES_DIR/dotfiles/bashrc:$HOME/.bashrc"
+        "$DOTFILES_DIR/dotfiles/bash_profile:$HOME/.bash_profile"
+        "$DOTFILES_DIR/dotfiles/gitconfig:$HOME/.gitconfig"
+        "$DOTFILES_DIR/dotfiles/tmux.conf:$HOME/.tmux.conf"
+        "$DOTFILES_DIR/dotfiles/vimrc:$HOME/.vimrc"
+    )
+
+    for mapping in "${user_mappings[@]}"; do
+        local src dest
+        IFS=':' read -r src dest <<< "$mapping"
+
+        if [[ -f "$src" ]]; then
+            mkdir -p "$(dirname "$dest")"
+            # -f erzwingt das Überschreiben existierender (falscher) Symlinks
+            ln -sf "$src" "$dest"
+            log "LINK: $dest -> $src"
+        else
+            log "SKIP: Quelle $src nicht im Repository gefunden."
         fi
     done
 
-    [[ "$found" -eq 0 ]] && echo "  Keine aktiven Framework-Links gefunden."
-    return 0
-}
+    # System-spezifische Konfigurationen (z.B. für Proxmox/ZFS)
+    if [[ -d "$DOTFILES_DIR/etc" ]]; then
+        log "SYS: Konfiguriere System-Komponenten..."
 
-# --- 2. SYSTEM-INTEGRATION ----------------------------------------------------
+        sudo mkdir -p "/etc/systemd/user/pipewire.service.d/"
+        # Nutze absoluten Pfad für Symlinks im System-Bereich
+        sudo ln -sf "$DOTFILES_DIR/etc/proxmox.conf" "/etc/systemd/user/pipewire.service.d/99-proxmox.conf"
 
-# ZWECK: Registriert dctl systemweit unter /usr/local/bin (Idempotent).
-# RETURN: 0
-df_register_dctl() {
-    local link_path="/usr/local/bin/dctl"
-    local script_path="${DF_REPO_ROOT}/dotfilesctl.sh"
-
-    [[ $EUID -ne 0 ]] && return 0
-
-    if [[ "$(readlink -f "$link_path" 2>/dev/null || true)" != "$script_path" ]]; then
-        df_log_info "Registriere 'dctl' systemweit..."
-        ln -sf -- "$script_path" "$link_path"
-        chmod +x -- "$script_path"
-    fi
-}
-
-# --- MAIN ---------------------------------------------------------------------
-
-CMD="${1:-help}"
-TARGET="${2:-$USER}"
-
-df_register_dctl
-
-case "$CMD" in
-    install)
-        if [[ "$TARGET" == "--all" ]]; then
-            for u in $(df_list_real_users); do
-                df_install_user "$u"
-            done
-        else
-            df_install_user "$TARGET"
+        # ZFS Cachefile Optimierung (nur wenn zpool vorhanden)
+        if command -v zpool >/dev/null; then
+            # Prüfe Pool-Status ohne Exit bei Fehler (SC2310 konform)
+            if sudo zpool list proxmox >/dev/null 2>&1; then
+                sudo zpool set cachefile=/etc/zfs/zpool.cache proxmox
+                log "SYS: ZFS Cachefile für 'proxmox' gesetzt."
+            else
+                log "WARN: ZFS Pool 'proxmox' nicht aktiv, Cache-Setting übersprungen."
+            fi
         fi
-        ;;
-    status)
-        df_status_user "$TARGET"
-        ;;
-    version)
-        # Jetzt sicher für ShellCheck
-        printf 'Dotfiles Framework %s\n' "$DF_PROJECT_VERSION"
-        ;;
-    help|*)
-        printf 'Nutzung: dctl {install|status|version} [user|--all]\n'
-        ;;
-esac
+    fi
+
+    log "DEPLOY: Erfolgreich abgeschlossen."
+}
+
+# Validiert den Zustand der Symlinks im Home-Verzeichnis
+check_status() {
+    log "STATUS: Überprüfe Symlink-Integrität..."
+    local files=(".bashrc" ".bash_profile" ".gitconfig" ".tmux.conf" ".vimrc")
+
+    for f in "${files[@]}"; do
+        if [[ -L "$HOME/$f" ]]; then
+            # Zeigt das Ziel des Symlinks an
+            echo "[OK] $f -> $(readlink "$HOME/$f")"
+        elif [[ -e "$HOME/$f" ]]; then
+            echo "[ERROR] $f ist eine reguläre Datei (kein Symlink)."
+        else
+            echo "[MISSING] $f existiert nicht."
+        fi
+    done
+}
+
+# --- 4. EXECUTION CONTROLLER (MAIN) -------------------------------------------
+
+main() {
+    # Falls kein Argument übergeben wurde, Hilfe anzeigen
+    case "${1:-help}" in
+        backup)
+            backup
+            ;;
+        install|deploy)
+            deploy
+            ;;
+        status)
+            check_status
+            ;;
+        *)
+            # Here-Doc für die CLI-Nutzungshilfe
+            cat <<EOF
+Nutzung: $SCRIPT_NAME {backup|install|status}
+
+Befehle:
+  backup    Sichert aktuelle Configs in ein versioniertes tar.gz.
+  install   Setzt Symlinks und wendet System-Parameter an.
+  status    Prüft die Integrität der lokalen Symlinks.
+
+Version: $DF_PROJECT_VERSION (Core: v3.3.0)
+EOF
+            exit 1
+            ;;
+    esac
+}
+
+# Startet das Skript mit allen übergebenen Parametern
+main "$@"
