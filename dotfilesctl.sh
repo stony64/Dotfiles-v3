@@ -181,7 +181,7 @@ Befehle:
 
 Version: $DF_PROJECT_VERSION (Core: v3.3.0)
 EOF
-            exit 1
+            return 1
             ;;
     esac
 }
