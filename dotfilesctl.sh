@@ -1,32 +1,32 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
 # FILE:         dotfilesctl.sh
-# VERSION:      3.4.6
-# DESCRIPTION:  Vollständiges Framework-Tool mit dynamischer Pfad-Korrektur.
+# VERSION:      3.4.7
+# DESCRIPTION:  Vollständiges Framework-Tool mit REINSTALL-Funktion.
 # AUTHOR:       Stony64
 # ------------------------------------------------------------------------------
 set -euo pipefail
 
-# --- 1. PFAD-LOGIK (Findet /opt/dotfiles automatisch) -------------------------
+# --- 1. PFAD-LOGIK & KONFIGURATION --------------------------------------------
 readonly REAL_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 readonly DOTFILES_DIR="$(cd "$(dirname "$REAL_PATH")" && pwd)"
 readonly TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 readonly BACKUP_BASE="$HOME/.dotfiles-temp-backup-$TIMESTAMP"
 
-# Wir exportieren DF_REPO_ROOT für die aktuelle Session, falls es falsch war
+# Export für Session-Konsistenz
 export DF_REPO_ROOT="$DOTFILES_DIR"
 
 log() { echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2; }
 
 # --- 2. KERNFUNKTIONEN --------------------------------------------------------
 
+# Sichert aktuelle Konfigurationen
 backup() {
     log "BACKUP: Initialisiere Sicherung in $HOME..."
     mkdir -p "$BACKUP_BASE"
     local targets=(
         "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.gitconfig"
         "$HOME/.tmux.conf" "$HOME/.vimrc" "$HOME/.bashaliases"
-        "/etc/systemd/user/pipewire.service.d/99-proxmox.conf"
     )
     for item in "${targets[@]}"; do
         if [[ -e "$item" ]]; then
@@ -41,6 +41,7 @@ backup() {
     log "BACKUP: Archiv erstellt: ~/dotfiles-backup-$TIMESTAMP.tar.gz"
 }
 
+# Verlinkt Dateien dynamisch
 deploy() {
     log "DEPLOY: Verlinke Home-Dateien aus $DOTFILES_DIR/home -> $HOME"
 
@@ -50,6 +51,7 @@ deploy() {
         local filename=$(basename "$src")
         local dest="$HOME/$filename"
 
+        # Backup bei regulärer Datei (kein Link)
         if [[ -f "$dest" && ! -L "$dest" ]]; then
             log "\e[33mWARN\e[0m: $filename ist eine Datei. Backup erstellt."
             mv "$dest" "${dest}.bak_${TIMESTAMP}"
@@ -59,23 +61,38 @@ deploy() {
         log "\e[32mLINK\e[0m: $filename verknüpft."
     done
     shopt -u dotglob nullglob
-
-    # --- SYSTEM EBENE (Proxmox/ETC) ---
-    if [[ -d "$DOTFILES_DIR/etc" ]]; then
-        log "SYS: Konfiguriere System-Komponenten..."
-        sudo mkdir -p "/etc/systemd/user/pipewire.service.d/"
-        if [[ -f "$DOTFILES_DIR/etc/proxmox.conf" ]]; then
-            sudo ln -sf "$DOTFILES_DIR/etc/proxmox.conf" "/etc/systemd/user/pipewire.service.d/99-proxmox.conf"
-            log "SYS: Pipewire Proxmox-Fix verlinkt."
-        fi
-        if command -v zpool >/dev/null 2>&1 && sudo zpool list proxmox >/dev/null 2>&1; then
-            sudo zpool set cachefile=/etc/zfs/zpool.cache proxmox
-            log "SYS: ZFS Cachefile für 'proxmox' gesetzt."
-        fi
-    fi
-    log "DEPLOY: Abgeschlossen."
 }
 
+# REINSTALL: Löscht bestehende Links und installiert neu
+reinstall() {
+    echo -e "\e[31m!!! ACHTUNG !!!\e[0m"
+    echo "Dies löscht alle bestehenden Dotfile-Symlinks im Home-Verzeichnis und setzt sie neu."
+    read -p "Fortfahren? (y/n): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log "Abbruch durch Benutzer."
+        return 1
+    fi
+
+    log "REINSTALL: Lösche alte Symlinks..."
+    shopt -s dotglob nullglob
+    for src in "$DOTFILES_DIR/home"/*; do
+        [[ -d "$src" ]] && continue
+        local filename=$(basename "$src")
+        local dest="$HOME/$filename"
+
+        if [[ -L "$dest" ]]; then
+            rm "$dest"
+            log "REMOVED: Link $filename gelöscht."
+        fi
+    done
+    shopt -u dotglob nullglob
+
+    log "REINSTALL: Starte Neuinstallation..."
+    deploy
+}
+
+# Statusprüfung
 check_status() {
     log "STATUS: Prüfung gegen Repository: $DOTFILES_DIR"
     shopt -s dotglob nullglob
@@ -94,15 +111,23 @@ check_status() {
     shopt -u dotglob nullglob
 }
 
-# --- 3. MAIN ------------------------------------------------------------------
+# --- 3. MAIN (EXECUTION) ------------------------------------------------------
 case "${1:-help}" in
-    backup)  backup ;;
-    install|deploy) deploy ;;
-    status)  check_status ;;
+    backup)            backup ;;
+    install|deploy)    deploy ;;
+    reinstall)         reinstall ;;
+    status)            check_status ;;
     *)
         cat <<EOF
-Nutzung: $SCRIPT_NAME {backup|install|status}
-Version: 3.4.6 (Erkennt Pfade automatisch)
+Nutzung: $SCRIPT_NAME {backup|install|reinstall|status}
+
+Befehle:
+  backup     Sichert Dateien in ein tar.gz Archiv.
+  install    Verlinkt alle Dateien aus ./home/ nach $HOME.
+  reinstall  Löscht bestehende Symlinks und installiert sie neu.
+  status     Prüft die Integrität der Links.
+
+Version: 3.4.7 (Pfad: $DOTFILES_DIR)
 EOF
         exit 0
         ;;
