@@ -29,7 +29,7 @@
     "[shellscript]": {
         "editor.tabSize": 4,
         "editor.insertSpaces": true,
-        "editor.defaultFormatter": "mads-hartmann.bash-ide-vscode",
+        "editor.defaultFormatter": "JetBrains.resharper-code",
         "editor.formatOnSave": true
     },
 

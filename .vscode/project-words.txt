@@ -82,6 +82,7 @@ mkparents
 Modulär
 MULTIHARDLINK
 myaliases
+myip
 nanorc
 ncdu
 netrc
