@@ -1,25 +1,22 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
 # FILE:          .bashprompt
-# VERSION:       1.5.3 (Fix: Prompt-Escape Error)
+# VERSION:       1.5.5 (Final Clean Version)
+# DESCRIPTION:   Git-aware PS1 mit korrektem Escaping für Bash
 # ------------------------------------------------------------------------------
 
-# 1. Basisfarben OHNE PS1-Maskierung (für printf/Funktionen)
-C_RED='\e[31m'
-C_BLUE='\e[34m'
-C_GREEN='\e[32m'
-C_CYAN='\e[36m'
-C_YELLOW='\e[33m'
-C_MAGENTA='\e[35m'
-C_RESET='\e[0m'
+# 1. Reine ANSI-Farben für die Verwendung in Funktionen (printf)
+# Wir nutzen hier keine \[ \], da diese nur für den PS1-String selbst sind.
+C_RED='\033[31m'
+C_GREEN='\033[32m'
+C_BLUE='\033[34m'
+C_CYAN='\033[36m'
+C_YELLOW='\033[33m'
+C_MAGENTA='\033[35m'
+C_RESET='\033[0m'
 
-# 2. Maskierte Farben NUR für die direkte PS1-Zuweisung
-P_BLUE='\[\e[34m\]'
-P_GREEN='\[\e[32m\]'
-P_CYAN='\[\e[36m\]'
-P_RED='\[\e[31m\]'
-P_RESET='\[\e[0m\]'
-
+# 2. Git-Status Funktion
+# Gibt den String ohne PS1-Maskierung zurück
 df_prompt_git() {
     git rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
     local branch dirty="" remote="" ahead=0 behind=0 indicators=""
@@ -37,17 +34,17 @@ df_prompt_git() {
         counts=$(git rev-list --left-right --count HEAD..."$upstream" 2>/dev/null || echo "0 0")
         ahead=$(echo "$counts" | awk '{print $1}')
         behind=$(echo "$counts" | awk '{print $2}')
-        [[ $ahead -gt 0 ]] && indicators+="${C_MAGENTA}+${ahead}"
-        [[ $behind -gt 0 ]] && indicators+="${C_MAGENTA}-${behind}"
+        [[ ${ahead:-0} -gt 0 ]] && indicators+="${C_MAGENTA}+${ahead}"
+        [[ ${behind:-0} -gt 0 ]] && indicators+="${C_MAGENTA}-${behind}"
     fi
 
-    # Innerhalb von $(...) brauchen wir KEINE \[ \] Maskierung!
     printf ' %s(%s%s%s%s)%s' "${C_RESET}" "${C_YELLOW}${branch}" "${dirty}" "${remote}" "${indicators}" "${C_RESET}"
 }
 
+# 3. Exit-Code Indikator
+# Speichert nur den rohen Farb-String
 set_prompt_exit_code() {
     local EXIT=$?
-    # WICHTIG: Keine \[ \] Maskierung hier!
     if [[ $EXIT -ne 0 ]]; then
         EXIT_IND="${C_RED}✘ ${C_RESET}"
     else
@@ -55,12 +52,25 @@ set_prompt_exit_code() {
     fi
 }
 
-# PROMPT_COMMAND Setup
-[[ "$PROMPT_COMMAND" != *set_prompt_exit_code* ]] && PROMPT_COMMAND="set_prompt_exit_code; ${PROMPT_COMMAND:-}"
+# PROMPT_COMMAND sorgt für die Evaluierung des Exit-Codes vor jedem Prompt
+if [[ "$PROMPT_COMMAND" != *set_prompt_exit_code* ]]; then
+    PROMPT_COMMAND="set_prompt_exit_code; ${PROMPT_COMMAND:-}"
+fi
 
-# PS1 Definition
-# Wir setzen die Maskierung \[ \] um die Variable \${EXIT_IND} herum!
+# 4. Die PS1-Zuweisung
+# Hier ist das Escaping entscheidend:
+# \[ \] umschließt alle nicht-druckbaren Zeichen (Farben).
+# \${EXIT_IND} wird zur Laufzeit expandiert.
+# \$(df_prompt_git) wird bei jedem Enter-Druck ausgeführt.
+
+# Wir definieren die maskierten Farben hier lokal für die PS1
+P_BLUE='\[\033[34m\]'
+P_GREEN='\[\033[32m\]'
+P_CYAN='\[\033[36m\]'
+P_RED='\[\033[31m\]'
+P_RESET='\[\033[0m\]'
+
 PS1="${P_CYAN}[${P_BLUE}\t${P_CYAN}] ${P_RED}\u${P_RESET}@${P_GREEN}\h${P_RESET}:${P_BLUE}\w\$(df_prompt_git)
-\[\${EXIT_IND}\]\$ ${P_RESET}"
+\[\033[0m\]\${EXIT_IND}\$ ${P_RESET}"
 
 export PS1
