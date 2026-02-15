@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
 # FILE:          .bashprompt
-# VERSION:       1.5.2 (Fix: Masking & No-Unset)
+# VERSION:       1.5.3 (Fix: Prompt-Escape Error)
 # ------------------------------------------------------------------------------
 
-# Maskierte Farben
+# 1. Basisfarben OHNE PS1-Maskierung (für printf/Funktionen)
+C_RED='\e[31m'
+C_BLUE='\e[34m'
+C_GREEN='\e[32m'
+C_CYAN='\e[36m'
+C_YELLOW='\e[33m'
+C_MAGENTA='\e[35m'
+C_RESET='\e[0m'
+
+# 2. Maskierte Farben NUR für die direkte PS1-Zuweisung
 P_BLUE='\[\e[34m\]'
 P_GREEN='\[\e[32m\]'
 P_CYAN='\[\e[36m\]'
-P_YELLOW='\[\e[33m\]'
 P_RED='\[\e[31m\]'
-P_MAGENTA='\[\e[35m\]'
 P_RESET='\[\e[0m\]'
 
 df_prompt_git() {
@@ -20,39 +27,40 @@ df_prompt_git() {
     branch=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse --short HEAD 2>/dev/null)
     [[ -z "$branch" ]] && return 0
 
-    # Schnellprüfung auf Änderungen
-    if ! git diff --quiet 2>/dev/null; then dirty="${P_YELLOW}*"; fi
+    if ! git diff --quiet 2>/dev/null; then dirty="${C_YELLOW}*"; fi
 
-    # Upstream Check (Safe Expansion)
     local upstream
     upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo "")
     if [[ -n "$upstream" ]]; then
-        remote=" ${P_CYAN}${upstream%%/*}"
-        ahead=$(git rev-list --left-right --count HEAD..."$upstream" 2>/dev/null | awk '{print $1}' || echo 0)
-        behind=$(git rev-list --left-right --count HEAD..."$upstream" 2>/dev/null | awk '{print $2}' || echo 0)
-        [[ ${ahead:-0} -gt 0 ]] && indicators+="${P_MAGENTA}+${ahead}"
-        [[ ${behind:-0} -gt 0 ]] && indicators+="${P_MAGENTA}-${behind}"
+        remote=" ${C_CYAN}${upstream%%/*}"
+        local counts
+        counts=$(git rev-list --left-right --count HEAD..."$upstream" 2>/dev/null || echo "0 0")
+        ahead=$(echo "$counts" | awk '{print $1}')
+        behind=$(echo "$counts" | awk '{print $2}')
+        [[ $ahead -gt 0 ]] && indicators+="${C_MAGENTA}+${ahead}"
+        [[ $behind -gt 0 ]] && indicators+="${C_MAGENTA}-${behind}"
     fi
 
-    printf ' %s(%s%s%s%s)%s' "${P_RESET}" "${P_YELLOW}${branch}" "${dirty}" "${remote}" "${indicators}" "${P_RESET}"
+    # Innerhalb von $(...) brauchen wir KEINE \[ \] Maskierung!
+    printf ' %s(%s%s%s%s)%s' "${C_RESET}" "${C_YELLOW}${branch}" "${dirty}" "${remote}" "${indicators}" "${C_RESET}"
 }
 
-# Exit-Code Indikator
 set_prompt_exit_code() {
     local EXIT=$?
+    # WICHTIG: Keine \[ \] Maskierung hier!
     if [[ $EXIT -ne 0 ]]; then
-        EXIT_IND="${P_RED}✘ ${P_RESET}"
+        EXIT_IND="${C_RED}✘ ${C_RESET}"
     else
         EXIT_IND=""
     fi
 }
 
-# Verhindert doppelte Einträge im PROMPT_COMMAND
+# PROMPT_COMMAND Setup
 [[ "$PROMPT_COMMAND" != *set_prompt_exit_code* ]] && PROMPT_COMMAND="set_prompt_exit_code; ${PROMPT_COMMAND:-}"
 
-# PS1 Definition (Multi-Line)
-# Die Farbcodes für @ und : wurden explizit maskiert
+# PS1 Definition
+# Wir setzen die Maskierung \[ \] um die Variable \${EXIT_IND} herum!
 PS1="${P_CYAN}[${P_BLUE}\t${P_CYAN}] ${P_RED}\u${P_RESET}@${P_GREEN}\h${P_RESET}:${P_BLUE}\w\$(df_prompt_git)
-\${EXIT_IND}\$ ${P_RESET}"
+\[\${EXIT_IND}\]\$ ${P_RESET}"
 
 export PS1
