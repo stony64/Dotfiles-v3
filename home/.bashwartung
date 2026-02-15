@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
 # FILE:          .bashwartung
-# VERSION:       1.2.0
-# DESCRIPTION:   System-Wartung (ShellCheck optimized)
+# VERSION:       1.4.0
+# DESCRIPTION:   System-Wartung mit Trennung (Update vs. Scrub)
 # AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 
@@ -17,84 +17,92 @@ fi
 # --- 1. APT HELFER ------------------------------------------------------------
 _df_wartung_apt_common() {
     export DEBIAN_FRONTEND=noninteractive
-    df_log_info "APT: Update + Upgrade..."
 
-    apt-get update     || { df_log_error "apt update fehlgeschlagen"; return 1; }
-    apt-get upgrade -y || { df_log_error "apt upgrade fehlgeschlagen"; return 1; }
-    apt-get autoremove -yqq || df_log_info "autoremove OK"
-    apt-get autoclean  || df_log_info "autoclean OK"
+    # Warte-Logik falls APT durch Unattended-Upgrades blockiert ist
+    local retry=0
+    while fuser /var/lib/apt/lists/lock >/dev/null 2>&1 ; do
+        if (( retry >= 6 )); then
+            df_log_error "APT ist dauerhaft blockiert. Abbruch."
+            return 1
+        fi
+        df_log_warn "APT Lock aktiv (Hintergrund-Update?). Warte 10s..."
+        sleep 10
+        ((retry++))
+    done
+
+    df_log_info "APT: Synchronisiere Paketlisten..."
+    apt-get update || { df_log_error "apt update fehlgeschlagen"; return 1; }
+
+    # Best Practice für Debian/Proxmox: full-upgrade
+    df_log_info "APT: Installiere Updates (full-upgrade)..."
+    apt-get full-upgrade -y || { df_log_error "apt upgrade fehlgeschlagen"; return 1; }
+
+    df_log_info "APT: Bereinige Cache & alte Pakete..."
+    apt-get autoremove -yqq && apt-get autoclean -yqq
 }
 
 # --- 2. HAUPTFUNKTION ---------------------------------------------------------
 df_wartung_run() {
-    printf '\033[1m========================================\033[0m\n'
-    df_log_info "System-Wartung: $(hostname) ($(date '+%Y-%m-%d %H:%M:%S'))"
-    printf '\033[1m========================================\033[0m\n\n'
+    local mode="${1:-"quick"}"
+    local start_time=$(date +%s)
 
-    # Grundlegende Checks
-    [[ "$(uname -s)" != *"Linux"* ]] && { df_log_error "Nur Linux unterstützt!"; return 1; }
-    [[ $EUID -ne 0 ]] && { df_log_error "sudo / Root-Rechte erforderlich!"; return 1; }
-    command -v apt-get >/dev/null 2>&1 || { df_log_error "apt-get nicht gefunden!"; return 1; }
+    printf '\033[1m================================================\033[0m\n'
+    df_log_info "System-Wartung: $(hostname) [Mode: ${mode}]"
+    printf '\033[1m================================================\033[0m\n\n'
 
-    # 1. APT Basis-Wartung
+    # Validierung
+    [[ "$(uname -s)" != "Linux" ]] && { df_log_error "Nur Linux unterstützt!"; return 1; }
+    [[ $EUID -ne 0 ]] && { df_log_error "Root-Rechte erforderlich! (Nutze sudo)"; return 1; }
+
+    # 1. APT Basis-Wartung (Immer)
     _df_wartung_apt_common || return 1
 
-# --- 2. HOST-SPEZIFISCH (Proxmox Teil) ----------------------------------------
-case "$(hostname)" in
-    proxmox*|pve*)
-        df_log_info "Proxmox: pveam + ZFS + pvetm..."
-
-        # FIX SC2015: Saubere Trennung von Existenzprüfung und Ausführung
+    # 2. HOST-SPEZIFISCH (Proxmox / ZFS)
+    if [[ "$HOSTNAME" == *proxmox* || "$HOSTNAME" == *pve* || -d /etc/pve ]]; then
+        # PVE Templates (Immer)
         if command -v pveam >/dev/null 2>&1; then
-            pveam update || df_log_error "pveam update fehlgeschlagen"
-        else
-            df_log_warn "pveam nicht gefunden, überspringe..."
+            df_log_info "Proxmox: Update Appliance Manager..."
+            pveam update || df_log_warn "pveam update fehlgeschlagen"
         fi
 
-        # ZFS Scrub (Optimiert)
-        if command -v zpool >/dev/null 2>&1; then
-            if zpool list >/dev/null 2>&1; then
-                local pool
-                pool=$(zpool list -H -o name | head -1)
-                if ! zpool status "$pool" | grep -q "scrub in progress"; then
-                    zpool scrub "$pool"
-                    df_log_success "ZFS Scrub auf $pool gestartet"
-                fi
+        # ZFS Scrub: NUR im Full-Mode (Monatlich empfohlen)
+        if [[ "$mode" == "--full" ]]; then
+            if command -v zpool >/dev/null 2>&1; then
+                local pools
+                pools=$(zpool list -H -o name)
+                for pool in $pools; do
+                    if ! zpool status "$pool" | grep -q "scrub in progress"; then
+                        df_log_info "ZFS: Starte Integritätsprüfung (Scrub) für $pool..."
+                        zpool scrub "$pool"
+                        df_log_success "Scrub für $pool im Hintergrund gestartet."
+                    else
+                        df_log_warn "ZFS: Scrub für $pool läuft bereits."
+                    fi
+                done
             fi
-        fi
-        ;;
-    # ... restliche Cases
-esac
-
-    # 3. CONTAINER (Docker/Podman)
-    if command -v docker >/dev/null 2>&1; then
-        df_log_info "Docker: System Prune..."
-        docker system prune -af --volumes >/dev/null 2>&1 && df_log_success "Docker pruned"
-    elif command -v podman >/dev/null 2>&1; then
-        df_log_info "Podman: System Prune..."
-        podman system prune -af >/dev/null 2>&1 && df_log_success "Podman pruned"
-    fi
-
-    # 4. FAIL2BAN
-    if command -v fail2ban-client >/dev/null 2>&1; then
-        if fail2ban-client ping >/dev/null 2>&1; then
-            df_log_success "fail2ban ist aktiv"
         else
-            df_log_warn "fail2ban Dienst reagiert nicht"
+            df_log_info "ZFS: Scrub übersprungen (Quick-Mode)."
         fi
     fi
 
-    # 5. LOCATE DB
+    # 3. LOCATE DB (Immer)
     if command -v updatedb >/dev/null 2>&1; then
-        df_log_info "Locate: updatedb..."
-        updatedb && df_log_success "Locate DB aktualisiert"
+        df_log_info "System: Aktualisiere Locate-Index..."
+        updatedb && df_log_success "Index aktualisiert."
     fi
 
-    # 6. ABSCHLUSS & LOGGING
-    df_log_success "=== Wartung erfolgreich beendet ($(date '+%H:%M:%S')) ==="
-    {
-        printf "%s: %s@%s - Wartung OK\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$(whoami)" "$(hostname)"
-    } >> /var/log/bashwartung.log 2>/dev/null || true
+    # 4. ABSCHLUSS & LOGGING
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+
+    df_log_success "=== Wartung beendet (Dauer: ${duration}s) ==="
+
+    # Log-Eintrag schreiben
+    local logfile="/var/log/bashwartung.log"
+    if [[ -w "$(dirname "$logfile")" ]]; then
+        printf "%s | %s | Mode: %s | Duration: %ss\n" \
+            "$(date '+%Y-%m-%d %H:%M:%S')" "$(hostname)" "$mode" "$duration" >> "$logfile" 2>/dev/null
+    fi
 
     return 0
 }

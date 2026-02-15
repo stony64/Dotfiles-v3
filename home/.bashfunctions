@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
-# FILE:          .bashfunctions
-# VERSION:       1.7.0
-# DESCRIPTION:   Power Bash Functions (Proxmox + Framework)
-# AUTHOR:        Stony64
+# FILE:        .bashfunctions
+# VERSION:     1.8.2
+# DESCRIPTION: Power Bash Functions - Optimized for Proxmox & Framework
+#              Designed to work in tandem with .bashaliases
+# AUTHOR:      Stony64
 # ------------------------------------------------------------------------------
 
-# ShellCheck safe (.shellcheckrc)
+# ShellCheck Konfiguration
 # shellcheck source=/dev/null disable=SC2034
 
-# --- 0. BOOTSTRAP (Standalone Logging) ----------------------------------------
+# --- 0. BOOTSTRAP (Logging & UI) ----------------------------------------------
+# Ermöglicht konsistente Statusmeldungen, auch wenn das Core-Framework fehlt.
 if ! command -v df_log_error >/dev/null 2>&1; then
     df_log_error()   { printf '\033[31m[ERR]\033[0m %s\n' "$*" >&2; }
     df_log_success() { printf '\033[32m[OK]\033[0m %s\n' "$*"; }
@@ -17,171 +19,169 @@ if ! command -v df_log_error >/dev/null 2>&1; then
     df_log_warn()    { printf '\033[33m[!]\033[0m %s\n' "$*"; }
 fi
 
-# --- 1. ARCHIV (compress/extract) ---------------------------------------------
-df_compress() {
-    local name="$1"
-    local source="$2"
-    local target
+# --- 1. ARCHIVIERUNG & EXTRAKTION ---------------------------------------------
 
+# Komprimiert Dateien/Ordner mit maximaler XZ-Kompression
+df_compress() {
+    local name="$1" source="$2" target
     if [[ -z "$name" || -z "$source" ]]; then
-        df_log_error "Usage: df_compress <name> <source>"
+        df_log_error "Usage: df_compress <target_name> <source_path>"
         return 1
     fi
-
     target="${name}.tar.xz"
+    df_log_info "Compressing $source to $target..."
     if tar -cvJf "$target" -- "$source"; then
-        df_log_success "→ $target ($(du -h "$target" | cut -f1))"
+        df_log_success "Done: $target ($(du -h "$target" | cut -f1))"
     else
         df_log_error "Compression failed."
         return 1
     fi
 }
 
+# Universal-Extraktor: ShellCheck SC2181 konform (direkter Exit-Code Check)
 extract() {
     local file="$1"
-    local dir
-
     if [[ ! -f "$file" ]]; then
-        df_log_error "No file: $file"
+        df_log_error "File not found: $file"
         return 1
     fi
 
-    dir="${file%.*}"
-    local success=0
+    local dir="${file%.*}"
+    [[ "$file" =~ \.tar\..* ]] && dir="${file%.tar.*}"
 
-    case "${file,,}" in
-        *.tar.bz2|*.tbz2|*.tbz)   tar xjf "$file" || success=1 ;;
-        *.tar.gz|*.tgz)           tar xzf "$file" || success=1 ;;
-        *.tar.xz|*.txz)           tar xJf "$file" || success=1 ;;
-        *.tar.zst)                unzstd "$file"  || success=1 ;;
-        *.lz4)                    unlz4 "$file"   || success=1 ;;
-        *.zip)                    unzip -q "$file" -d "${dir:-.}" || success=1 ;;
-        *.7z)                     if command -v 7z >/dev/null 2>&1; then 7z x "$file" -o"${dir:-.}"; else df_log_error "Install 7z"; success=1; fi ;;
-        *.rar)                    if command -v unrar >/dev/null 2>&1; then unrar x "$file"; else df_log_error "Install unrar"; success=1; fi ;;
-        *.gz)                     gunzip "$file"  || success=1 ;;
-        *.bz2)                    bunzip2 "$file" || success=1 ;;
-        *.xz)                     unxz "$file"    || success=1 ;;
-        *.zst)                    unzstd "$file"  || success=1 ;;
-        *) df_log_error "Unknown format: $file"; return 1 ;;
-    esac
-
-    if [[ $success -eq 0 ]]; then
-        df_log_success "Extracted: $file $([[ -d "$dir" ]] && echo "→ $dir" || echo "flat")"
-        if [[ -d "$dir" ]]; then
-            cd "$dir" || return 1
-        fi
+    # Befehl wird direkt im 'if' ausgeführt, um $? Fallstricke zu vermeiden
+    if case "${file,,}" in
+        *.tar.bz2|*.tbz2|*.tbz) tar xjf "$file" ;;
+        *.tar.gz|*.tgz)         tar xzf "$file" ;;
+        *.tar.xz|*.txz)         tar xJf "$file" ;;
+        *.tar.zst)              unzstd -c "$file" | tar xf - ;;
+        *.zip)                  unzip -q "$file" -d "${dir}" ;;
+        *.7z)                   7z x "$file" -o"${dir}" ;;
+        *.rar)                  unrar x "$file" ;;
+        *.gz)                   gunzip -k "$file" ;;
+        *.bz2)                  bunzip2 -k "$file" ;;
+        *.xz)                   unxz -k "$file" ;;
+        *)                      df_log_error "Format not supported: $file"; return 1 ;;
+    esac; then
+        df_log_success "Extracted: $file"
+        # Automatisch in den neuen Ordner wechseln, falls einer erstellt wurde
+        [[ -d "$dir" ]] && cd "$dir" || return 0
     else
-        df_log_error "Extraction of $file failed."
+        df_log_error "Extraction failed."
         return 1
     fi
 }
 
-# --- 2. SUCHE (hg/ff/ft) -----------------------------------------------------
-hg() {  # History grep
+# --- 2. INTELLIGENTE SUCHE ----------------------------------------------------
+
+# History-Grep: Durchsucht die Befehlshistorie effizient
+hg() {
     [[ -z "$1" ]] && { df_log_error "Usage: hg <term>"; return 1; }
-    history | grep -i --color=auto -- "$1" | tail -20
+    # Schneidet führende Nummern ab, um nur den Befehl zu greppen
+    history | cut -c 8- | grep -i --color=always -- "$1" | tail -20
 }
 
-ff() {  # Find files
+# Schnellsuche für Dateien (max. 4 Ebenen tief, ohne Müll)
+ff() {
     [[ -z "$1" ]] && { df_log_error "Usage: ff <name>"; return 1; }
-    find . -iname "*$1*" -not -path '*/\.*' -not -path '*/node_modules/*' 2>/dev/null | head -20
+    find . -maxdepth 4 -iname "*$1*" -not -path '*/\.*' -not -path '*/node_modules/*' 2>/dev/null | head -20
 }
 
-ft() {  # File text
-    local term="$1"
-    local mask="${2:-*}"
-
+# Inhalts-Suche: Durchsucht Dateiinhalte (Grep-Power-Alias)
+ft() {
+    local term="$1" mask="${2:-*}"
     [[ -z "$term" ]] && { df_log_error "Usage: ft <text> [mask]"; return 1; }
-    grep -rniI --color=auto \
-        --exclude-dir={.git,node_modules,build,dist} \
+    grep -rniI --color=always \
+        --exclude-dir={.git,node_modules,build,dist,.venv} \
         --include="*$mask*" -- "$term" . 2>/dev/null | head -50
 }
 
-# --- 3. META (aliases/functions) ----------------------------------------------
+# --- 3. METADATEN & DISCOVERY -------------------------------------------------
+
+# Listet alle aktiven Aliase tabellarisch auf
 show_aliases() {
-    df_log_info "Aliasse ($(alias | wc -l)):"
+    df_log_info "Active Aliases ($(alias | wc -l)):"
     alias | sed 's/^alias //' | column -t -s'=' | less -R
 }
 
+# Listet geladene User-Funktionen (filtert interne df_ / _ Funktionen)
 show_functions() {
-    df_log_info "Funktionen ($(declare -F | wc -l)):"
-    declare -F | awk '{print $NF}' | grep -v '^_' | sort | column | less -R
+    df_log_info "User Functions ($(declare -F | wc -l)):"
+    declare -F | awk '{print $NF}' | grep -vE '^(_|df_)' | sort | column | less -R
 }
 
-# --- 4. NAVIGATION (mkd/lt/cdd) -----------------------------------------------
+# --- 4. NAVIGATION & STRUKTUR -------------------------------------------------
+
+# Verzeichnis erstellen und sofort hineinwechseln
 mkd() {
     mkdir -p -- "$@" && cd -- "${1:-.}" || return 1
 }
 
+# Verzeichnis-Struktur-Anzeige (Tree mit Fallback auf Find)
 lt() {
     local target="${1:-.}"
-    # FIX SC2015: if-else statt && ||
+    # FIX SC2015: Echtes if-else statt && || Konstrukt
     if command -v tree >/dev/null 2>&1; then
-        tree -aC -I '.git|node_modules|.DS_Store|backup' --dirsfirst "$target" | less -R
+        tree -aC -I '.git|node_modules|.DS_Store|backup' --dirsfirst "$target" | head -n 40
     else
-        find "$target" -maxdepth 3 -not -path '*/\.*' | sed 's|^\./||' | column
+        find "$target" -maxdepth 2 -not -path '*/\.*' | sed 's|^\./||' | column
     fi
 }
 
-cdd() { cd "${DF_REPO_ROOT:-/opt/dotfiles}" || return 1; }
-fsize() { du -sh ./* 2>/dev/null | sort -h; }
+# --- 5. SYSTEM & NETZWERK -----------------------------------------------------
 
-# --- 5. SYSTEM/PROXMOX (mem/ip/port) ------------------------------------------
-df_mem_top() {
-    df_log_info "Top 10 RAM:"
-    ps auxf | sort -nr -k 4 | head -11 | sed '1i USER PID %CPU %MEM VSZ RSS TTY STAT START TIME COMMAND'
-}
-
+# Zeigt lokale und öffentliche IP mit Timeout-Schutz
 df_myip() {
     local local_ipv4 pub_ip
-    local_ipv4="$(hostname -I 2>/dev/null | awk '{print $1}' || ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | head -1)"
-    [[ -n "$local_ipv4" ]] && df_log_info "Local IPv4: $local_ipv4"
+    local_ipv4="$(hostname -I | awk '{print $1}')"
+    [[ -n "$local_ipv4" ]] && df_log_info "Local:  $local_ipv4"
 
-    pub_ip="$(curl -s --connect-timeout 3 --max-time 5 https://api.ipify.org 2>/dev/null || \
-             curl -s --connect-timeout 3 https://ifconfig.me 2>/dev/null || \
-             curl -s --connect-timeout 3 https://icanhazip.com 2>/dev/null)"
+    pub_ip="$(curl -s --connect-timeout 2 --max-time 3 https://api.ipify.org 2>/dev/null || \
+             curl -s --connect-timeout 2 https://ifconfig.me 2>/dev/null)"
 
     if [[ -n "$pub_ip" ]]; then
-        df_log_success "Public IP: $pub_ip"
+        df_log_success "Public: $pub_ip"
     else
-        df_log_warn "Public IP offline"
+        df_log_warn "Public IP: Offline / Timeout"
     fi
 }
 
+# Port-Belegung prüfen
 port() {
-    [[ -z "$1" ]] && { df_log_error "Usage: port <num>"; return 1; }
-    ss -tulpn | grep ":$1"
+    [[ -z "$1" ]] && { df_log_error "Usage: port <number>"; return 1; }
+    ss -tulpn | grep -E "Netid|:$1"
 }
 
-# --- 6. CLEANUP (links/zfs/pve) -----------------------------------------------
+# --- 6. PROXMOX & CLEANUP -----------------------------------------------------
+
+# PVE-Node Status Übersicht (jq optimiert)
+pve_status() {
+    if ! command -v pvesh >/dev/null 2>&1; then
+        df_log_error "Proxmox CLI (pvesh) not found."
+        return 1
+    fi
+
+    if command -v jq >/dev/null 2>&1; then
+        pvesh get /nodes --output-format json | jq -r '.[] | "Node: \(.node) | Status: \(.status) | CPU: \((.cpu*100|round))% | RAM: \((.mem/1024/1024/1024|round))GB"'
+    else
+        pvesh get /nodes --output-format text
+    fi
+}
+
+# Entfernt tote Symlinks zuverlässig (SC2015 korrigiert)
 df_clean_links() {
-    local count=0
-    # Nutze ein temporäres File oder Array, um Probleme mit Subshells zu vermeiden
+    local link count=0
+    # Suche tote Links (Existierende Links ohne Ziel)
     while read -r link; do
-        if rm -v "$link"; then
+        if rm -v "$link" 2>/dev/null; then
             ((count++))
         fi
-    done < <(find . -xtype l -print)
+    done < <(find . -maxdepth 2 -xtype l)
 
+    # Korrektur SC2015: if-else Logik
     if [[ $count -gt 0 ]]; then
-        df_log_success "Gelöscht: $count tote Links"
+        df_log_success "Cleaned $count dead links."
     else
-        df_log_info "Keine toten Links gefunden."
-    fi
-}
-
-pve_status() {
-    if command -v pvesh >/dev/null 2>&1; then
-        pvesh get /nodes --output-format json-pretty-pretty | jq '.data[] | {node: .node, status: .status, cpu: .cpu, mem: .mem}'
-    else
-        df_log_warn "pvesh not found (No PVE Node?)"
-    fi
-}
-
-zfs_status() {
-    if command -v zpool >/dev/null 2>&1; then
-        zpool status -v | head -30
-    else
-        df_log_warn "No ZFS found on this system."
+        df_log_info "No dead links found."
     fi
 }

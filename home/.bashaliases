@@ -1,43 +1,46 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
-# FILE:          .bashaliases
-# VERSION:       1.8.3
-# DESCRIPTION:   Power Aliases - ShellCheck Compliant (No SC2262/SC2139)
-# AUTHOR:        Stony64
+# FILE:        .bashaliases
+# VERSION:     1.9.3
+# DESCRIPTION: Professional Power Aliases & Shell Functions
+#              Optimized for Bash 4.0+, ShellCheck compliant, Proxmox-ready.
+# AUTHOR:      Stony64
 # ------------------------------------------------------------------------------
 
-# --- 1. SICHERHEIT (INTERAKTIV) -----------------------------------------------
-alias cp='cp -i --preserve=all'
-alias mv='mv -i --preserve=all'
-alias rm='rm -i --preserve-root=always'
-alias ln='ln -i -v'
-alias chown='chown --preserve-root'
-alias chmod='chmod --preserve-root'
-alias chgrp='chgrp --preserve-root'
-alias mkdir='mkdir -p -v'
+# --- 1. CORE & SICHERHEIT -----------------------------------------------------
+
+# DER SUDO-TRICK: Erlaubt Bash, das Wort nach sudo ebenfalls auf Aliase zu prüfen.
+alias sudo='sudo '
+
+alias cp='cp -i --preserve=all'           # Interaktives Kopieren mit Metadaten
+alias mv='mv -i --preserve=all'           # Interaktives Verschieben
+alias rm='rm -i --preserve-root=always'   # Schutz gegen 'rm -rf /'
+alias ln='ln -i -v'                       # Interaktive und geschwätzige Links
+alias chown='chown --preserve-root'       # Root-Schutz für Besitzerwechsel
+alias chmod='chmod --preserve-root'       # Root-Schutz für Rechteänderung
+alias mkdir='mkdir -p -v'                 # Erstellt Pfad-Strukturen sofort
 
 # --- 2. NAVIGATION ------------------------------------------------------------
 alias ..='cd ..'
 alias ...='cd ../..'
 alias ....='cd ../../..'
-alias ~='cd ~'
-alias -- -='cd -'
+alias -- -='cd -'                         # Schnell zurück zum letzten Verzeichnis
 alias home='cd ~'
 
-# --- 3. LS LOGIK (Funktionen statt Aliase zur Vermeidung von SC2139/SC2262) ----
+# --- 3. DYNAMISCHE LS-LOGIK (TOOL-AWARE) --------------------------------------
 
-# Wir bestimmen das Tool einmalig beim Laden.
-# WICHTIG: Wir nutzen 'command ls', um SC2218 zu vermeiden.
+# Wir ermitteln einmalig beim Laden, welches Tool verfügbar ist.
 if command -v eza >/dev/null 2>&1; then
     _ls_tool="eza"
     _ls_flags="--group-directories-first --git --icons"
+    _ls_time="--time-style=long-iso"
 elif command -v lsd >/dev/null 2>&1; then
     _ls_tool="lsd"
     _ls_flags="--group-dirs-first --icon always"
+    _ls_time="--date=long-iso"
 else
     _ls_tool="ls"
-    # FIX SC2218: 'command' stellt sicher, dass das System-ls genutzt wird,
-    # nicht die unten definierte Funktion.
+    _ls_time="--time-style=long-iso"
     if command ls --group-directories-first . >/dev/null 2>&1; then
         _ls_flags="--color=auto --group-directories-first"
     else
@@ -45,81 +48,32 @@ else
     fi
 fi
 
-# Jetzt definieren wir die Befehle als Funktionen.
-# Wir nutzen den vollen Pfad oder 'command', um Rekursion zu verhindern.
-
+# SC2248: Wir wollen Word-Splitting für $_ls_flags explizit zulassen.
+# shellcheck disable=SC2248
 ls() { command "$_ls_tool" $_ls_flags "$@"; }
-ll() { command "$_ls_tool" $_ls_flags -la --time-style=long-iso "$@"; }
+# shellcheck disable=SC2248
+ll() { command "$_ls_tool" $_ls_flags -la $_ls_time "$@"; }
+# shellcheck disable=SC2248
 la() { command "$_ls_tool" $_ls_flags -lA "$@"; }
+# shellcheck disable=SC2248
 l()  { command "$_ls_tool" $_ls_flags -lh "$@"; }
 
-# --- 4. SYSTEM/DISK -----------------------------------------------------------
+# --- 4. SYSTEM & RESSOURCEN ---------------------------------------------------
 alias df='df -hT -x tmpfs -x devtmpfs -x squashfs -x overlay'
 alias du='du -h'
-alias du1='LC_ALL=C du -h --max-depth=1 2>/dev/null | LC_ALL=C sort -hr'
-alias dutop='LC_ALL=C du -hs * 2>/dev/null | LC_ALL=C sort -rh | LC_ALL=C head -n 10'
 alias free='free -h --si'
 alias uptime='uptime -p'
 alias cls='clear && ls'
 
 alias sc='systemctl'
 alias jc='journalctl -n 50 --no-pager'
-alias n='ncdu'
 alias psmem='ps auxf | sort -nr -k 4 | head -15'
 
-# --- 5. LOGS/DIAGNOSE ---------------------------------------------------------
+# --- 5. DIAGNOSE & NETZWERK ---------------------------------------------------
 alias journal='journalctl -n 50 --no-pager | less -R'
 alias dmesg='dmesg --color=always -H -T'
 alias psg='ps auxf | grep -v grep | grep -i -e VSZ -e'
 alias ports='ss -tulpn | grep LISTEN'
-
-# --- 6. TEXT/GREP -------------------------------------------------------------
-alias grep='grep --color=auto'
-alias fgrep='grep -F --color=auto'
-alias egrep='grep -E --color=auto'
-alias rgrep='grep -rni --exclude-dir={.git,node_modules}'
-alias nano='nano -c'
-alias less='less -R'
-alias tail='tail -n 20 -f'
-alias head='head -n 20'
-
-# --- 7. GIT (Power-Shortcuts) -------------------------------------------------
-alias g='git'
-alias st='git status'
-alias co='git checkout'
-alias br='git branch -v'
-alias cm='git commit -m'
-alias ca='git add . && git commit -m'
-alias capp='git add . && git commit -m "Update" && git push'
-alias gd='git diff --stat'
-alias gds='git diff --stat --cached'
-alias undo='git reset --soft HEAD~1'
-alias lg='git log --oneline --graph --decorate --all -15'
-alias gpl='git pull --rebase'
-
-# Funktion statt Alias für dynamische Branch-Ermittlung
-gpsh() {
-    local branch
-    branch=$(git branch --show-current)
-    git push --set-upstream origin "$branch"
-}
-
-# --- 8. PROXMOX/ZFS -----------------------------------------------------------
-alias pct='pct -logfile /tmp/pct.log'
-alias qm='qm -logfile /tmp/qm.log'
-alias zfs='zfs -p'
-alias zpool='zpool -m'
-alias pvestat='pvesh get "/nodes/$(hostname)/status"'
-
-zfslist() {
-    local pool
-    pool=$(zpool list -H -o name | head -1)
-    if [[ -n "$pool" ]]; then
-        zfs list -o space,name,mountpoint -r "$pool"
-    fi
-}
-
-# --- 9. NETZWERK/SSH ----------------------------------------------------------
 alias ssh='TERM=xterm-256color ssh -o ServerAliveInterval=60'
 
 myip() {
@@ -130,11 +84,60 @@ myip() {
     fi
 }
 
-# --- 10. HILFSWERKZEUGE -------------------------------------------------------
+# --- 6. TEXTVERARBEITUNG ------------------------------------------------------
+alias grep='grep --color=auto --binary-files=without-match'
+alias fgrep='grep -F --color=auto'
+alias egrep='grep -E --color=auto'
+alias rgrep='grep -rni --exclude-dir={.git,node_modules}'
+alias nano='nano -c'
+alias less='less -R'
+
+# --- 7. GIT POWER-SHORTCUTS ---------------------------------------------------
+alias g='git'
+alias st='git status'
+alias co='git checkout'
+alias br='git branch -v'
+alias cm='git commit -m'
+alias gd='git diff --stat'
+alias lg="git log --graph --pretty=format:'%C(yellow)%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -15"
+
+# Upstream Push Logic
+gpsh() {
+    local branch
+    branch=$(git branch --show-current)
+    if ! git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+        git push --set-upstream origin "$branch"
+    else
+        git push
+    fi
+}
+
+# --- 8. PROXMOX & STORAGE -----------------------------------------------------
+alias pct='pct -logfile /tmp/pct-${USER}.log'
+alias qm='qm -logfile /tmp/qm-${USER}.log'
+alias zfs='zfs -p'
+alias zpool='zpool -m'
+
+zfslist() {
+    local pool
+    pool=$(zpool list -H -o name | head -1)
+    [[ -n "$pool" ]] && zfs list -o space,name,mountpoint -r "$pool"
+}
+
+# --- 9. WARTUNG & UPDATES (Integration .bashwartung) --------------------------
+if [[ -f ~/.bashwartung ]]; then
+    # Täglich: Nur Paket-Updates
+    alias au='sudo bash -c "source ~/.bashwartung && df_wartung_run"'
+    # Monatlich: Updates + ZFS Scrub
+    alias au-full='sudo bash -c "source ~/.bashwartung && df_wartung_run --full"'
+fi
+
+# --- 10. MISC & FIXES ---------------------------------------------------------
+path() {
+    printf "%b\n" "${PATH//:/\\n}" | column
+}
+
 alias f='find . -iname'
-alias path='printf "%s\n" "${PATH//:/\\n}" | column'
-alias exi='exit'
-alias exti='exit'
 alias chwon='chown'
 alias chmpod='chmod'
 
@@ -142,20 +145,12 @@ if command -v tree >/dev/null 2>&1; then
     alias tree='tree -F --dirsfirst --filelimit 50 --gitignore'
 fi
 
-# Framework Integration (Fix SC2015)
 tools() {
     if command -v show_aliases >/dev/null 2>&1; then
         show_aliases | head -30
-        echo
-        show_functions | head -20
-        echo
+        echo ""
         myip
     else
         alias
     fi
 }
-
-# Wartung Shortcut
-if [[ -f ~/.bashwartung ]]; then
-    alias au='sudo bash -c "source ~/.bashwartung && df_wartung_run"'
-fi

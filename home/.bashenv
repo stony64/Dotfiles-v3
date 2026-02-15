@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
 # FILE:          .bashenv
-# VERSION:       1.5.2
+# VERSION:       1.6.0
 # DESCRIPTION:   Zentrale Umgebungsvariablen (Proxmox + Framework)
 # AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
@@ -9,105 +9,96 @@
 # ShellCheck safe (.shellcheckrc)
 # shellcheck source=/dev/null disable=SC2155,SC2034
 
-# Strict Mode (performant)
-set -o errexit -o nounset -o pipefail
+# --- 1. CORE SETTINGS ---------------------------------------------------------
+# HINWEIS: 'set -e' wird hier bewusst NICHT global gesetzt, da dies bei einem
+# fehlerhaften Environment-Check die gesamte Login-Shell schließen würde.
+set -o nounset  # Fehler bei Zugriff auf nicht gesetzte Variablen
+set -o pipefail # Pipes geben den Fehlercode des letzten fehlgeschlagenen Befehls weiter
 
-# --- EDITOR & VIEWER ----------------------------------------------------------
+# --- 2. EDITOR & VIEWER (Auto-Discovery) --------------------------------------
 # Priorität: code/codium > nvim > micro > nano > vi
 for cmd in code codium nvim micro nano vi; do
     if command -v "$cmd" >/dev/null 2>&1; then
-        EDITOR="$cmd"
-        VISUAL="$cmd"
-        GIT_EDITOR="$cmd"
-        export EDITOR VISUAL GIT_EDITOR
+        export EDITOR="$cmd"
+        export VISUAL="$cmd"
+        export GIT_EDITOR="$cmd"
         break
     fi
 done
 
-# --- HISTORY SUPERCHARGED -----------------------------------------------------
-HISTTIMEFORMAT="%F %T "
-HISTCONTROL="ignoreboth:erasedups"
-HISTIGNORE="&:ls:ll:la:lat:lah:l.:[ ]*:cd:cd ..:..:pwd:exit:clear:mc:au:fg:bg:jobs:history:df:du:dutop:dctl:proxmox:pct:qm:zfs:zpool:pveproxy"
-HISTSIZE=10000
-HISTFILESIZE=100000
-export HISTTIMEFORMAT HISTCONTROL HISTIGNORE HISTSIZE HISTFILESIZE
+# --- 3. HISTORY SUPERCHARGED --------------------------------------------------
+export HISTTIMEFORMAT="%F %T "
+export HISTCONTROL="ignoreboth:erasedups"
+# Ignoriert triviale Befehle und sensible Framework-Kommandos
+export HISTIGNORE="&:ls:ll:la:l:..:pwd:exit:clear:mc:au:dctl:proxmox:pct:qm:zfs:zpool"
+export HISTSIZE=10000
+export HISTFILESIZE=100000
 
-shopt -s histappend cmdhist cdspell checkwinsize globstar direxpand
+# Shell-Optionen für besseres Handling
+shopt -s histappend  # History an Datei anhängen statt überschreiben
+shopt -s cmdhist     # Mehrzeilige Befehle als ein Eintrag speichern
+shopt -s cdspell     # Korrigiert kleine Tippfehler bei 'cd'
+shopt -s checkwinsize # Aktualisiert Fenstergröße nach jedem Befehl
+shopt -s globstar    # Erlaubt rekursives Globbing mit **
 
-# History anhängen (performant)
+# Sofortiges Speichern der History nach jedem Befehl (Multi-Terminal Sync)
 PROMPT_COMMAND="history -a; ${PROMPT_COMMAND:-}"
 export PROMPT_COMMAND
 
-# --- MAN/LESS FARBEN (Terminal-aware) -----------------------------------------
+# --- 4. TERMINAL COLORS & PAGER -----------------------------------------------
 if [[ "$TERM" != "dumb" ]] && command -v tput >/dev/null 2>&1; then
-    MANPAGER="less -s -M +Gg"
-    export MANPAGER
+    export MANPAGER="less -s -M +Gg"
 
-    # LESS_TERMCAP_* (man farbig – ShellCheck False Positive)
-    # shellcheck disable=SC2034
-    LESS_TERMCAP_mb="$(tput bold; tput setaf 1)"
-    LESS_TERMCAP_md="$(tput bold; tput setaf 3)"
-    LESS_TERMCAP_me="$(tput sgr0)"
-    LESS_TERMCAP_se="$(tput rmso; tput sgr0)"
-    LESS_TERMCAP_so="$(tput bold; tput setab 4; tput setaf 3)"
-    LESS_TERMCAP_ue="$(tput rmul; tput sgr0)"
-    LESS_TERMCAP_us="$(tput smul; tput setaf 2)"
-    export LESS_TERMCAP_mb LESS_TERMCAP_md LESS_TERMCAP_me LESS_TERMCAP_se LESS_TERMCAP_so LESS_TERMCAP_ue LESS_TERMCAP_us
+    # Farbige Man-Pages (LESS_TERMCAP)
+    export LESS_TERMCAP_mb="$(tput bold; tput setaf 1)" # Blink
+    export LESS_TERMCAP_md="$(tput bold; tput setaf 3)" # Bold / Titel
+    export LESS_TERMCAP_me="$(tput sgr0)"               # Reset
+    export LESS_TERMCAP_se="$(tput rmso; tput sgr0)"    # Standout end
+    export LESS_TERMCAP_so="$(tput bold; tput setab 4; tput setaf 3)" # Info-Balken
+    export LESS_TERMCAP_ue="$(tput rmul; tput sgr0)"    # Underline end
+    export LESS_TERMCAP_us="$(tput smul; tput setaf 2)" # Underline start
 
-    # Modern less Flags
-    LESS='-R -i -w -z-4 -M --shift=5'
-    export LESS
+    # Modern less Flags: R (Farben), i (Case-Insensitive Suche), M (Langer Prompt)
+    export LESS='-R -i -w -z-4 -M --shift=5'
 fi
 
-# --- FZF (falls installiert) --------------------------------------------------
-# Ctrl+T Preview: bat mit Zeilennummern + Farben (sichere Quotes für Dateinamen)
-# --- FZF (falls installiert) --------------------------------------------------
+# --- 5. FZF CONFIGURATION -----------------------------------------------------
 if command -v fzf >/dev/null 2>&1; then
-    FZF_DEFAULT_OPTS='
-        --height 50%
-        --layout=reverse
-        --border
-        --margin=1
-        --info=inline
-    '
+    export FZF_DEFAULT_OPTS='--height 50% --layout=reverse --border --margin=1 --info=inline'
 
-    FZF_CTRL_T_OPTS="--preview=bat --style=numbers --color=always --line-range=:500 {}"
-
-    export FZF_DEFAULT_OPTS FZF_CTRL_T_OPTS
-fi
-
-# --- LOCALES (Tools C + UI Deutsch) -------------------------------------------
-LC_ALL=C
-export LC_ALL
-
-if [[ "$(uname -s)" == "Linux" ]] && locale -a 2>/dev/null | grep -qE "(de_DE|de_DE.UTF-8)"; then
-    LANG=de_DE.UTF-8
-    LC_MESSAGES=de_DE.UTF-8
-    LC_CTYPE=C.UTF-8
-else
-    LANG=en_US.UTF-8
-    LC_MESSAGES=en_US.UTF-8
-    LC_CTYPE=C.UTF-8
-fi
-export LANG LC_MESSAGES LC_CTYPE
-
-# --- PROXMOX/ZFS EXTRAS -------------------------------------------------------
-if [[ "$(uname -s)" == "Linux" ]]; then
-    ZPOOL_FEATURES="async_destroy,bookmarks"
-    export ZPOOL_FEATURES
-
-    # Proxmox Proxy (falls pveproxy läuft)
-    if command -v pveproxy >/dev/null 2>&1; then
-        http_proxy="http://localhost:8006"
-        export http_proxy
+    # Falls 'bat' installiert ist, nutzen wir es als Preview-Engine
+    if command -v bat >/dev/null 2>&1; then
+        export FZF_CTRL_T_OPTS="--preview 'bat --style=numbers --color=always --line-range :500 {}'"
+    elif command -v batcat >/dev/null 2>&1; then
+        export FZF_CTRL_T_OPTS="--preview 'batcat --style=numbers --color=always --line-range :500 {}'"
     fi
 fi
 
-# --- GPG/PINENTRY (modern) ----------------------------------------------------
-GPG_TTY="$(tty)"
-PINENTRY_USER_DATA="USE_CURSES=1"
-export GPG_TTY PINENTRY_USER_DATA
+# --- 6. LOCALES (System-aware) ------------------------------------------------
+# Wir setzen LC_CTYPE auf C.UTF-8 für korrekte Sortierung in Skripten,
+# erlauben aber LANG für die UI-Sprache.
+export LC_CTYPE=C.UTF-8
 
-# Framework (Dotfiles v3)
-DF_PROJECT_VERSION="3.2.0"
-export DF_PROJECT_VERSION DF_REPO_ROOT
+if [[ "$(uname -s)" == "Linux" ]] && locale -a 2>/dev/null | grep -qE "(de_DE|de_DE.UTF-8)"; then
+    export LANG=de_DE.UTF-8
+    export LC_MESSAGES=de_DE.UTF-8
+else
+    export LANG=en_US.UTF-8
+    export LC_MESSAGES=en_US.UTF-8
+fi
+
+# --- 7. PROXMOX / ZFS / GPG ---------------------------------------------------
+if [[ "$(uname -s)" == "Linux" ]]; then
+    export ZPOOL_FEATURES="async_destroy,bookmarks"
+
+    # GPG TTY Zuweisung (verhindert Fehler bei Passphrase-Abfrage)
+    export GPG_TTY="$(tty)"
+    export PINENTRY_USER_DATA="USE_CURSES=1"
+fi
+
+# --- 8. FRAMEWORK METADATA ----------------------------------------------------
+export DF_PROJECT_VERSION="3.5.0"
+# Pfad-Check für Repo-Root
+if [[ -z "${DF_REPO_ROOT:-}" ]]; then
+    export DF_REPO_ROOT="/opt/dotfiles"
+fi

@@ -1,134 +1,145 @@
 #!/usr/bin/env bash
 # ------------------------------------------------------------------------------
-# FILE:         dotfilesctl.sh
-# VERSION:      3.4.7
-# DESCRIPTION:  Vollständiges Framework-Tool mit REINSTALL-Funktion.
-# AUTHOR:       Stony64
+# FILE:          dotfilesctl.sh
+# VERSION:       3.6.3
+# DESCRIPTION:   Framework-Controller (ShellCheck-Clean & Logic-optimized)
+# AUTHOR:        Stony64
 # ------------------------------------------------------------------------------
 set -euo pipefail
 
-# --- 1. PFAD-LOGIK & KONFIGURATION --------------------------------------------
+# --- 1. KONFIGURATION ---------------------------------------------------------
 readonly REAL_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 readonly DOTFILES_DIR="$(cd "$(dirname "$REAL_PATH")" && pwd)"
 readonly TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
-readonly BACKUP_BASE="$HOME/.dotfiles-temp-backup-$TIMESTAMP"
+readonly BACKUP_DIR="$HOME/.dotfiles_backups"
 
-# Export für Session-Konsistenz
-export DF_REPO_ROOT="$DOTFILES_DIR"
+# Farben für Log-Ausgaben
+export C_RED='\033[0;31m'
+export C_GREEN='\033[0;32m'
+export C_YELLOW='\033[0;33m'
+export C_BLUE='\033[0;34m'
+export C_RESET='\033[0m'
 
-log() { echo -e "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >&2; }
+log_info()    { printf "${C_BLUE}[INFO]${C_RESET}  %s\n" "$*"; }
+log_success() { printf "${C_GREEN}[OK]${C_RESET}    %s\n" "$*"; }
+log_warn()    { printf "${C_YELLOW}[WARN]${C_RESET}  %s\n" "$*"; }
+log_error()   { printf "${C_RED}[ERR]${C_RESET}   %s\n" "$*" >&2; }
 
 # --- 2. KERNFUNKTIONEN --------------------------------------------------------
 
-# Sichert aktuelle Konfigurationen
 backup() {
-    log "BACKUP: Initialisiere Sicherung in $HOME..."
-    mkdir -p "$BACKUP_BASE"
-    local targets=(
-        "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.gitconfig"
-        "$HOME/.tmux.conf" "$HOME/.vimrc" "$HOME/.bashaliases"
-    )
+    local backup_root="${BACKUP_DIR:?}"
+    local ts="${TIMESTAMP:?}"
+    local current_tmp="$backup_root/$ts"
+
+    log_info "Initialisiere Backup in $backup_root..."
+    mkdir -p "$current_tmp"
+
+    local targets=(".bashrc" ".bash_profile" ".gitconfig" ".bashaliases" ".bashenv" ".bashprompt" ".bashfunctions")
+
     for item in "${targets[@]}"; do
-        if [[ -e "$item" ]]; then
-            local dest="$BACKUP_BASE${item}"
-            mkdir -p "$(dirname "$dest")"
-            cp -a "$item" "$dest"
-            log "BACKUP: $item gesichert."
+        if [[ -f "$HOME/$item" ]]; then
+            cp -L "$HOME/$item" "$current_tmp/$item"
+            log_info "Gesichert: $item"
         fi
     done
-    tar czf "$HOME/dotfiles-backup-$TIMESTAMP.tar.gz" -C "$BACKUP_BASE" . 2>/dev/null
-    rm -rf "$BACKUP_BASE"
-    log "BACKUP: Archiv erstellt: ~/dotfiles-backup-$TIMESTAMP.tar.gz"
+
+    if cd "$backup_root" && tar czf "backup-$ts.tar.gz" "$ts"; then
+        rm -rf "${current_tmp:?}"
+        log_success "Backup erstellt: backup-$ts.tar.gz"
+    else
+        log_error "Archivierung fehlgeschlagen!"
+        return 1
+    fi
 }
 
-# Verlinkt Dateien dynamisch
 deploy() {
-    log "DEPLOY: Verlinke Home-Dateien aus $DOTFILES_DIR/home -> $HOME"
+    log_info "Deploying Dotfiles aus $DOTFILES_DIR/home..."
+    [[ -d "$DOTFILES_DIR/home" ]] || { log_error "Source 'home/' fehlt!"; exit 1; }
 
     shopt -s dotglob nullglob
     for src in "$DOTFILES_DIR/home"/*; do
-        [[ -d "$src" ]] && continue
+        [[ "$src" == *".bak"* ]] && continue
         local filename=$(basename "$src")
         local dest="$HOME/$filename"
 
-        # Backup bei regulärer Datei (kein Link)
-        if [[ -f "$dest" && ! -L "$dest" ]]; then
-            log "\e[33mWARN\e[0m: $filename ist eine Datei. Backup erstellt."
+        if [[ -e "$dest" && ! -L "$dest" ]]; then
+            log_warn "Datei $filename existiert -> Backup erstellt."
             mv "$dest" "${dest}.bak_${TIMESTAMP}"
         fi
 
         ln -snf "$src" "$dest"
-        log "\e[32mLINK\e[0m: $filename verknüpft."
+        printf "  ${C_GREEN}LINK${C_RESET} -> %s\n" "$filename"
     done
     shopt -u dotglob nullglob
 }
 
-# REINSTALL: Löscht bestehende Links und installiert neu
-reinstall() {
-    echo -e "\e[31m!!! ACHTUNG !!!\e[0m"
-    echo "Dies löscht alle bestehenden Dotfile-Symlinks im Home-Verzeichnis und setzt sie neu."
-    read -p "Fortfahren? (y/n): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        log "Abbruch durch Benutzer."
-        return 1
-    fi
-
-    log "REINSTALL: Lösche alte Symlinks..."
-    shopt -s dotglob nullglob
-    for src in "$DOTFILES_DIR/home"/*; do
-        [[ -d "$src" ]] && continue
-        local filename=$(basename "$src")
-        local dest="$HOME/$filename"
-
-        if [[ -L "$dest" ]]; then
-            rm "$dest"
-            log "REMOVED: Link $filename gelöscht."
-        fi
-    done
-    shopt -u dotglob nullglob
-
-    log "REINSTALL: Starte Neuinstallation..."
-    deploy
-}
-
-# Statusprüfung
 check_status() {
-    log "STATUS: Prüfung gegen Repository: $DOTFILES_DIR"
+    log_info "Integritätsprüfung (Repo: $DOTFILES_DIR)"
+    local error_count=0
+
     shopt -s dotglob nullglob
     for src in "$DOTFILES_DIR/home"/*; do
-        [[ -d "$src" ]] && continue
         local f=$(basename "$src")
         local target="$HOME/$f"
+
         if [[ -L "$target" ]]; then
-            [[ "$(readlink "$target")" == "$src" ]] && echo -e "\e[32m[OK]\e[0m $f" || echo -e "\e[31m[WRONG]\e[0m $f"
+            local link_target
+            link_target=$(readlink "$target")
+            if [[ "$link_target" == "$src" ]]; then
+                printf "  ${C_GREEN}[OK]${C_RESET}     %s\n" "$f"
+            else
+                printf "  ${C_RED}[WRONG]${C_RESET}  %s -> %s\n" "$f" "$link_target"
+                ((error_count++))
+            fi
         elif [[ -e "$target" ]]; then
-            echo -e "\e[31m[FILE]\e[0m $f (blockiert)"
+            printf "  ${C_YELLOW}[FILE]${C_RESET}   %s (blockiert)\n" "$f"
+            ((error_count++))
         else
-            echo -e "\e[33m[MISSING]\e[0m $f"
+            printf "  ${C_RED}[MISSING]${C_RESET} %s\n" "$f"
+            ((error_count++))
         fi
     done
     shopt -u dotglob nullglob
+
+    if [[ $error_count -eq 0 ]]; then
+        log_success "Status sauber."
+    else
+        log_error "$error_count Fehler gefunden."
+    fi
 }
 
-# --- 3. MAIN (EXECUTION) ------------------------------------------------------
+# --- 3. MAIN EXECUTION --------------------------------------------------------
+# --- 3. MAIN EXECUTION --------------------------------------------------------
+
 case "${1:-help}" in
-    backup)            backup ;;
-    install|deploy)    deploy ;;
-    reinstall)         reinstall ;;
-    status)            check_status ;;
+    backup)
+        backup
+        ;;
+    install)
+        # FIX SC2310: Funktionen separat aufrufen, damit 'set -e' aktiv bleibt.
+        backup
+        deploy
+        ;;
+    reinstall)
+        log_warn "Lösche bestehende Links..."
+        shopt -s dotglob nullglob
+        for src in "$DOTFILES_DIR/home"/*; do
+            target="$HOME/$(basename "$src")"
+            if [[ -L "$target" ]]; then
+                rm "$target"
+                printf "  ${C_RED}RM LINK${C_RESET} <- %s\n" "$(basename "$target")"
+            fi
+        done
+        deploy
+        ;;
+    status)
+        check_status
+        ;;
     *)
         cat <<EOF
-Nutzung: $SCRIPT_NAME {backup|install|reinstall|status}
-
-Befehle:
-  backup     Sichert Dateien in ein tar.gz Archiv.
-  install    Verlinkt alle Dateien aus ./home/ nach $HOME.
-  reinstall  Löscht bestehende Symlinks und installiert sie neu.
-  status     Prüft die Integrität der Links.
-
-Version: 3.4.7 (Pfad: $DOTFILES_DIR)
+Dotfiles Controller v3.6.4
+Nutzung: dctl {backup|install|reinstall|status}
 EOF
-        exit 0
         ;;
 esac

@@ -14,6 +14,7 @@ bashexports
 bashfunctions
 bashprompt
 bashwartung
+batcat
 befehl
 bhelp
 binstall
@@ -33,12 +34,14 @@ cachefile
 Cachefiles
 capp
 cdspell
+Cgreen
 checkwinsize
 chgrp
 chmpod
 chwon
 cmdhist
 constantshow
+Creset
 currentlinecolor
 cursorline
 cvzf
@@ -69,6 +72,7 @@ escapen
 EUID
 exkl
 exti
+Extraktor
 Farbedefinitionen
 fgrep
 filelimit
@@ -77,6 +81,7 @@ fname
 formatoninput
 fsize
 functioncolor
+fuser
 gesourct
 gesourcte
 getent
@@ -85,6 +90,7 @@ GMTP
 gnupg
 gotar
 gpsh
+greppen
 histappend
 historylog
 hotlist
@@ -124,6 +130,7 @@ myaliases
 myip
 nanorc
 ncdu
+Netid
 netrc
 noconvert
 nologin
@@ -204,6 +211,7 @@ unzstd
 updatedb
 updatelists
 Usernamen
+venv
 Verlinkungs
 Verschachtelungen
 versioniertes
