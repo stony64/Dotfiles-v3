@@ -1,16 +1,27 @@
 #!/usr/bin/env bash
-# ------------------------------------------------------------------------------
+# --------------------------------------------------------------------------
 # FILE:        dotfilesctl.sh
 # VERSION:     3.6.7
-# DESCRIPTION: Framework Controller (Install/Backup/Status Management)
+# DESCRIPTION: Dotfiles Framework Controller
 # AUTHOR:      Stony64
-# CHANGES:     v3.6.7 - Add backup cleanup, status legend, improved logging
-# ------------------------------------------------------------------------------
+# LAST UPDATE: 2026-02-16
+# CHANGES:     3.6.7 - Fix symlink resolution for /usr/local/bin/dctl
+# --------------------------------------------------------------------------
 
 set -euo pipefail
 
+# --- BOOTSTRAP: RESOLVE SCRIPT DIRECTORY --------------------------------------
+# Handle symlinks correctly (e.g., /usr/local/bin/dctl -> /opt/dotfiles/dotfilesctl.sh)
+# shellcheck disable=SC2128
+SCRIPTDIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
+readonly SCRIPTDIR
+
 # --- BOOTSTRAP: LOAD CORE FRAMEWORK -------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! source "${SCRIPTDIR}/core.sh"; then
+    printf '\033[31m[FATAL]\033[0m core.sh required for operation\n' >&2
+    printf 'Expected: %s/core.sh\n' "${SCRIPTDIR}" >&2
+    exit 1
+fi
 
 # shellcheck source=core.sh
 if ! source "${SCRIPT_DIR}/core.sh"; then
