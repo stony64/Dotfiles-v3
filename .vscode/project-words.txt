@@ -49,6 +49,7 @@ cmdhist
 configparser
 constantshow
 coreutils
+cpio
 Creset
 currentlinecolor
 cursorline
@@ -104,6 +105,7 @@ formatoninput
 foxundermoon
 frontmatter
 fsize
+FTPD
 fullscreen
 functioncolor
 fuser

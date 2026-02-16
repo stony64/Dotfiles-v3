@@ -1,149 +1,394 @@
 # ------------------------------------------------------------------------------
 # FILE:        .github/workflows/release.yml
-# VERSION:     3.6.7
+# VERSION:     3.6.8 (IMPROVED)
 # DESCRIPTION: Auto GitHub Release from core.sh Version + Changelog
 # AUTHOR:      Stony64 - Bash/Shell Dotfiles Framework
-# CHANGES:     v3.6.7 - Version mismatch is now error (not warning)
+# CHANGES:     3.6.8 - Version ShellCheck action, improve error handling
 # ------------------------------------------------------------------------------
 
+# ==============================================================================
+# GITHUB ACTIONS WORKFLOW: AUTOMATED RELEASES
+# ==============================================================================
+# Purpose: Create GitHub Release when version tag is pushed
+#
+# Features:
+#   - Automatic version extraction from core.sh (DF_PROJECT_VERSION)
+#   - Changelog extraction from CHANGELOG.md (version-specific section)
+#   - Pre-release QA checks (ShellCheck validation)
+#   - Version/Tag mismatch detection (prevents wrong releases)
+#   - Manual trigger with version override (workflow_dispatch)
+#
+# Workflow:
+#   1. Tag pushed (git tag v3.6.7 && git push --tags)
+#   2. ShellCheck runs (validate shell scripts)
+#   3. Version extracted from core.sh
+#   4. Changelog extracted from CHANGELOG.md
+#   5. GitHub Release created with assets and notes
+#
+# Version Matching:
+#   - core.sh: export DF_PROJECT_VERSION="3.6.7"
+#   - Git tag: v3.6.7
+#   - Must match! (error if mismatch)
+#
+# Documentation:
+#   - Releases: https://docs.github.com/en/repositories/releasing-projects-on-github
+#   - softprops/action-gh-release: https://github.com/softprops/action-gh-release
+# ==============================================================================
+
+# Workflow display name (shown in GitHub Actions UI)
+# Emoji: 🏷️ (label) indicates release/tagging task
 name: "🏷️ Create Release"
 
+# ==============================================================================
+# TRIGGERS: When this workflow runs
+# ==============================================================================
 on:
+  # TRIGGER 1: push (tags)
+  # Runs when version tag is pushed to repository
+  # Use case: git tag v3.6.7 && git push --tags
   push:
+    # tags: Version tag pattern
+    # Pattern: "v*" matches v1.0.0, v3.6.7, v2.0.0-rc1
+    # Excludes: Non-version tags (feature/*, test/*)
     tags:
       - "v*"
+
+  # TRIGGER 2: workflow_dispatch
+  # Manual trigger via GitHub UI (Actions tab)
+  # Use case: Create release without pushing tag (testing, hotfix)
   workflow_dispatch:
+    # inputs: Manual parameters
     inputs:
+      # version: Override version from core.sh
+      # Use case: Emergency release, version mismatch fix
+      # Example: "3.6.7" (without 'v' prefix)
       version:
         description: "Manual Version Override (e.g., 3.6.7)"
         required: false
         default: ""
+
+      # prerelease: Mark release as pre-release (not stable)
+      # Use case: Beta, RC, alpha releases
+      # Effect: Yellow badge, not shown as "Latest Release"
       prerelease:
         description: "Mark as pre-release"
         required: false
         default: false
         type: boolean
 
+# ==============================================================================
+# CONCURRENCY: Prevent overlapping releases
+# ==============================================================================
+# Prevents multiple release workflows running simultaneously
+# Critical: Avoid duplicate releases, race conditions
 concurrency:
+  # group: Unique identifier for concurrency group
+  # Format: workflow-name-ref
+  # Example: create-release-v3.6.7
   group: ${{ github.workflow }}-${{ github.ref }}
+
+  # cancel-in-progress: Cancel older release if new one starts
+  # true: New tag push cancels old release (avoid duplicates)
+  # Why true: Only latest tag matters (old release pointless)
   cancel-in-progress: true
 
+# ==============================================================================
+# PERMISSIONS: GitHub token capabilities
+# ==============================================================================
+# Explicit permissions (security best practice)
 permissions:
+  # contents: write
+  # Permission: Create releases, upload assets, modify repo
+  # Scope: Write access to repository (releases, tags, code)
+  # Required by: softprops/action-gh-release (creates release)
   contents: write
+
+  # checks: read
+  # Permission: Read check run status (ShellCheck results)
+  # Scope: Read-only access to check runs
+  # Required by: Status icon generation (✅/❌ in release notes)
   checks: read
 
+# ==============================================================================
+# JOBS: Workflow tasks
+# ==============================================================================
 jobs:
   # --- PRE-CHECKS (Optional QA before release) --------------------------------
+  # Job ID: shellcheck (used for dependencies, status checks)
   shellcheck:
+    # name: Display name in GitHub UI
+    # Emoji: 🔍 (magnifying glass) indicates validation/checking
     name: "🔍 ShellCheck Validation"
+
+    # runs-on: GitHub-hosted runner
+    # ubuntu-latest: Latest Ubuntu LTS (22.04 or 24.04)
     runs-on: ubuntu-latest
+
+    # continue-on-error: Proceed if ShellCheck fails
+    # true: Release created even if ShellCheck fails (non-blocking QA)
+    # false: Release blocked by ShellCheck failures (strict QA)
+    # Why true: Allow releases with warnings (user decides to fix)
     continue-on-error: true
 
     steps:
+      # --------------------------------------------------------------------------
+      # STEP 1: Checkout Repository
+      # --------------------------------------------------------------------------
+      # Action: actions/checkout@v4 (official GitHub action)
+      # Purpose: Clone repository code to runner
+      # Version: v4 (latest stable, uses Node.js 20)
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
 
+      # --------------------------------------------------------------------------
+      # STEP 2: Run ShellCheck
+      # --------------------------------------------------------------------------
+      # Action: ludeeus/action-shellcheck@master
+      # ⚠️ IMPROVEMENT: Use versioned release instead of @master
+      # Purpose: Validate shell scripts (syntax, best practices)
+      # Output: Annotations on code (warnings, errors)
       - name: 🔍 Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
+        # IMPROVED: Use versioned release instead of @master
+        # @master: Unstable (may break, no version pinning)
+        # @2.15.0: Stable, reproducible (recommended)
+        # Latest: https://github.com/ludeeus/action-shellcheck/releases
+        uses: ludeeus/action-shellcheck@2.15.0 # ✅ IMPROVED: Version pinning
         with:
+          # scandir: Directory to scan (recursive)
+          # ".": Repository root (all subdirectories)
           scandir: "."
+
+          # severity: Minimum severity level to report
+          # error: Only errors (blocks release if found)
+          # warning: Warnings and errors
+          # info: All issues (verbose)
+          # Why error: Strict QA (only critical issues)
           severity: error
+
+          # ignore_paths: Exclude patterns (space-separated)
+          # node_modules: External dependencies (not our code)
+          # test_sandbox: Test files (may have intentional issues)
           ignore_paths: "node_modules test_sandbox"
 
   # --- RELEASE CREATION -------------------------------------------------------
+  # Job ID: release (main release creation job)
   release:
+    # name: Display name in GitHub UI
+    # Emoji: 🚀 (rocket) indicates deployment/release
     name: "🚀 Publish Release"
+
+    # runs-on: GitHub-hosted runner
     runs-on: ubuntu-latest
+
+    # needs: Job dependencies (wait for these jobs)
+    # [shellcheck]: Wait for ShellCheck to complete
+    # Why: Show QA status in release notes (✅/❌ icon)
     needs: [shellcheck]
-    if: always() # Run even if shellcheck fails
+
+    # if: Conditional execution (run even if dependencies fail)
+    # always(): Run even if shellcheck fails/skips
+    # Why: Release not blocked by QA (non-critical check)
+    if: always()
 
     steps:
+      # --------------------------------------------------------------------------
+      # STEP 1: Checkout Repository
+      # --------------------------------------------------------------------------
+      # Action: actions/checkout@v4
+      # Purpose: Clone repository code (need core.sh, CHANGELOG.md)
       - name: 📥 Checkout Repository
         uses: actions/checkout@v4
         with:
+          # token: Authentication token for git operations
+          # secrets.GITHUB_TOKEN: Automatically provided by GitHub
           token: ${{ secrets.GITHUB_TOKEN }}
+
+          # fetch-depth: Number of commits to fetch
+          # 0: Full history (all commits, all tags)
+          # Why 0: Need git history for changelog comparison, previous tags
           fetch-depth: 0
 
+      # --------------------------------------------------------------------------
+      # STEP 2: Extract Version from core.sh
+      # --------------------------------------------------------------------------
+      # Purpose: Parse DF_PROJECT_VERSION from core.sh
+      # Output: DF_VER (version number), TAG (git tag name)
+      # Validation: Check version/tag mismatch (error if mismatch)
       - name: 🏷️ Extract Version from core.sh
+        # id: meta (reference outputs as steps.meta.outputs.DF_VER)
         id: meta
         shell: bash
         run: |
-          # Parse DF_PROJECT_VERSION from core.sh (robust)
+          # Parse DF_PROJECT_VERSION from core.sh (robust extraction)
+          # awk: Extract version from: export DF_PROJECT_VERSION="3.6.7"
+          # -F'"': Field separator = double quote (split by quotes)
+          # /^export DF_PROJECT_VERSION=/: Match line starting with export
+          # {print $2; exit}: Print second field (version), then exit (first match)
+          # 2>/dev/null: Suppress errors if file not found
+          # || echo "": Fallback to empty string if parsing fails
           RAW_VER=$(awk -F'"' '/^export DF_PROJECT_VERSION=/{print $2; exit}' core.sh 2>/dev/null || echo "")
 
-          # Determine final version
+          # Determine final version (priority order)
+          # 1. Manual override (workflow_dispatch input)
+          # 2. Parsed from core.sh (DF_PROJECT_VERSION)
+          # 3. Git tag name (fallback, strip 'v' prefix)
           if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            # Manual override (workflow_dispatch)
             VERSION="${{ github.event.inputs.version }}"
           elif [[ -n "$RAW_VER" ]]; then
+            # Parsed from core.sh (standard flow)
             VERSION="$RAW_VER"
           else
             # Fallback to tag name (strip 'v' prefix if present)
+            # Example: v3.6.7 → 3.6.7
             VERSION="${{ github.ref_name }}"
-            VERSION="${VERSION#v}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix (bash parameter expansion)
           fi
 
+          # Output variables (accessible in later steps)
+          # GITHUB_OUTPUT: Special file for step outputs
+          # Format: KEY=VALUE (one per line)
           echo "DF_VER=$VERSION" >> "$GITHUB_OUTPUT"
           echo "TAG=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
 
+          # Logging: Show extracted values (GitHub Actions UI)
+          # ::notice:: = Info message (blue icon in Actions log)
           echo "::notice::Code Version: $RAW_VER"
           echo "::notice::Final Version: $VERSION"
           echo "::notice::Git Tag: ${{ github.ref_name }}"
 
-          # Version/Tag mismatch is now an ERROR (not warning)
-          # Ensures releases only happen when code version matches tag
+          # VERSION/TAG MISMATCH CHECK (strict validation)
+          # Ensures core.sh version matches git tag
+          # Why: Prevent wrong version releases (manual tag without code update)
+          # Example error: core.sh=3.6.6, tag=v3.6.7 → MISMATCH!
+          #
+          # Condition breakdown:
+          #   $RAW_VER != ${{ github.ref_name }}*: Version doesn't match tag
+          #   -n "$RAW_VER": Version was parsed (not empty)
+          # Pattern match: "3.6.7" != "v3.6.7"* (tag has 'v' prefix)
           if [[ "$RAW_VER" != "${{ github.ref_name }}"* && -n "$RAW_VER" ]]; then
+            # ::error:: = Error message (red icon, visible in Actions log)
             echo "::error::Version Mismatch! Code v$RAW_VER ≠ Tag ${{ github.ref_name }}"
             echo "::error::Please update DF_PROJECT_VERSION in core.sh to match tag"
+            # exit 1: Fail workflow (block release)
             exit 1
           fi
 
+      # --------------------------------------------------------------------------
+      # STEP 3: Generate Changelog from CHANGELOG.md
+      # --------------------------------------------------------------------------
+      # Purpose: Extract version-specific changelog section
+      # Format: Extract text between ## [VERSION] headers
+      # Output: changelog (multi-line text for release notes)
       - name: 📄 Generate Changelog from CHANGELOG.md
+        # id: changelog (reference as steps.changelog.outputs.changelog)
         id: changelog
+
+        # if: Conditional execution (only if version extracted)
+        # steps.meta.outputs.DF_VER != '': Version is not empty
+        # Why: No point extracting changelog without version
         if: steps.meta.outputs.DF_VER != ''
         shell: bash
         run: |
+          # VERSION: Use extracted version from previous step
           VERSION="${{ steps.meta.outputs.DF_VER }}"
 
           # Extract section from CHANGELOG.md (between version headers)
+          # CHANGELOG.md format:
+          #   ## [3.6.7] - 2026-02-16
+          #   ### Added
+          #   - Feature 1
+          #   - Feature 2
+          #
+          #   ## [3.6.6] - 2026-02-01
+          #   ...
           if [[ -f "CHANGELOG.md" ]]; then
+            # sed command breakdown:
+            # -n: Suppress default output (only print matching lines)
+            # "/## \\[$VERSION\\]/,/^## \\[/p": Range pattern
+            #   - Start: ## [VERSION] (e.g., ## [3.6.7])
+            #   - End: Next ## [ header (next version section)
+            #   - p: Print matching range
+            # | sed '1d;$d': Remove first and last line (headers)
+            # | sed '/^$/d': Remove empty lines
             CHANGELOG_SECTION=$(sed -n "/## \\[$VERSION\\]/,/^## \\[/p" CHANGELOG.md | sed '1d;$d' | sed '/^$/d')
 
+            # Check if changelog section found
             if [[ -n "$CHANGELOG_SECTION" ]]; then
+              # Multi-line output (GitHub Actions format)
+              # EOF: Delimiter for multi-line string
+              # {}: Braces for variable scope
               {
                 echo "changelog<<EOF"
                 echo "$CHANGELOG_SECTION"
                 echo "EOF"
               } >> "$GITHUB_OUTPUT"
+              # ::notice:: = Success message
               echo "::notice::Changelog extracted for v$VERSION"
             else
+              # ::warning:: = Warning message (yellow icon)
               echo "::warning::No changelog section found for v$VERSION"
             fi
           else
+            # CHANGELOG.md file not found
             echo "::warning::CHANGELOG.md not found"
           fi
 
+      # --------------------------------------------------------------------------
+      # STEP 4: Check Previous Jobs Status
+      # --------------------------------------------------------------------------
+      # Purpose: Get status of ShellCheck job (success/failure/skipped)
+      # Output: shellcheck_icon (✅/❌/⏭️ emoji for release notes)
       - name: 🔍 Check Previous Jobs Status
+        # id: qa_status (reference as steps.qa_status.outputs.shellcheck_icon)
         id: qa_status
+
+        # if: always() (run even if previous steps failed)
         if: always()
         run: |
           # Check if shellcheck job ran and get its result
+          # needs.shellcheck.result: Job result from dependency
+          # Possible values: success, failure, cancelled, skipped
+          # || 'skipped': Fallback if result is null/undefined
           SHELLCHECK_STATUS="${{ needs.shellcheck.result || 'skipped' }}"
 
+          # Map status to emoji icon (for release notes table)
           if [[ "$SHELLCHECK_STATUS" == "success" ]]; then
+            # ✅ Green checkmark (passed)
             echo "shellcheck_icon=✅" >> "$GITHUB_OUTPUT"
           elif [[ "$SHELLCHECK_STATUS" == "failure" ]]; then
+            # ❌ Red X (failed)
             echo "shellcheck_icon=❌" >> "$GITHUB_OUTPUT"
           else
+            # ⏭️ Fast-forward (skipped/cancelled)
             echo "shellcheck_icon=⏭️" >> "$GITHUB_OUTPUT"
           fi
 
+      # --------------------------------------------------------------------------
+      # STEP 5: Create GitHub Release
+      # --------------------------------------------------------------------------
+      # Action: softprops/action-gh-release@v2
+      # Purpose: Create GitHub Release with notes, assets, changelog
+      # Version: v2 (latest stable, updated 2025)
       - name: 🚀 Create GitHub Release
         uses: softprops/action-gh-release@v2
         env:
+          # GITHUB_TOKEN: Required for release creation
+          # Scope: contents: write permission (defined above)
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # tag_name: Git tag for release
+          # github.ref_name: Tag name (e.g., v3.6.7)
+          # Note: Must exist (created by push event or manually)
           tag_name: ${{ github.ref_name }}
+
+          # name: Release title (shown at top of release page)
+          # Format: "Dotfiles Framework v3.6.7"
           name: "Dotfiles Framework v${{ steps.meta.outputs.DF_VER }}"
+
+          # body: Release notes (Markdown format)
+          # Multi-line string (YAML literal block)
+          # Contains: Version info, QA status, install instructions, changelog
           body: |
             ## 🛠️ Dotfiles Framework v${{ steps.meta.outputs.DF_VER }}
 
@@ -188,25 +433,72 @@ jobs:
 
             ---
             *Release automatically generated from [core.sh](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/core.sh) version*
-          generate_release_notes: false # Use custom changelog
+
+          # generate_release_notes: Use GitHub's auto-generated notes
+          # false: Use custom changelog (from CHANGELOG.md)
+          # true: GitHub generates notes from commits/PRs
+          # Why false: Manual changelog more curated, structured
+          generate_release_notes: false
+
+          # draft: Create as draft (unpublished)
+          # false: Publish immediately (public release)
+          # true: Save as draft (review before publishing)
+          # Why false: Automated release (trust CI checks)
           draft: false
+
+          # prerelease: Mark as pre-release (not stable)
+          # Condition: Manual flag OR tag contains rc/beta/alpha
+          # Examples:
+          #   - v3.6.7-rc1 → prerelease: true
+          #   - v3.6.7-beta → prerelease: true
+          #   - v3.6.7 → prerelease: false
+          # Effect: Yellow badge, not shown as "Latest Release"
           prerelease: ${{ github.event.inputs.prerelease == 'true' || contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
 
+      # --------------------------------------------------------------------------
+      # STEP 6: Release Summary
+      # --------------------------------------------------------------------------
+      # Purpose: Create visual summary in Actions tab
+      # Output: GitHub-flavored Markdown (rendered in UI)
+      # Location: Actions → Workflow run → Summary tab
       - name: 📊 Release Summary
+        # if: always() (show summary for both success and failure)
         if: always()
         run: |
+          # Heading: ### = H3 (large, visible)
           echo "### 🎉 Release Published!"
           echo ""
+
+          # Version info: Show extracted version and tag
           echo "**Version:** v${{ steps.meta.outputs.DF_VER }}"
           echo "**Tag:** \`${{ github.ref_name }}\`"
+
+          # job.status: success, failure, cancelled (GitHub context var)
           echo "**Status:** ${{ job.status }}"
           echo ""
+
+          # Links section: Clickable URLs to release, code, compare
           echo "#### 🔗 Links"
+
+          # Release page: Direct link to newly created release
           echo "- [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }})"
+
+          # Code at tag: Browse repository at specific tag
           echo "- [View Code](https://github.com/${{ github.repository }}/tree/${{ github.ref_name }})"
+
+          # Compare changes: Diff between previous tag and current
+          # git describe: Find previous tag (most recent tag before current)
+          # --tags: Consider all tags (not just annotated)
+          # --abbrev=0: Show full tag name (no commit hash)
+          # ^: Previous commit (parent of current tag)
           echo "- [Compare Changes](https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 ${{ github.ref_name }}^)...${{ github.ref_name }})"
           echo ""
+
+          # Quick install section: Copy-paste command
           echo "#### 📦 Quick Install Command"
           echo "\`\`\`bash"
+          # One-liner install: Clone + install + source
+          # --depth=1: Shallow clone (faster, only latest commit)
+          # \$USER: Escaped variable (evaluated by user, not GitHub Actions)
           echo "sudo git clone --depth=1 https://github.com/${{ github.repository }} /opt/dotfiles && sudo /opt/dotfiles/dotfilesctl.sh install \$USER"
           echo "\`\`\`"
