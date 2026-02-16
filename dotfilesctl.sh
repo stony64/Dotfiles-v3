@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # --------------------------------------------------------------------------
 # FILE:        dotfilesctl.sh
-# VERSION:     3.6.7
+# VERSION:     3.6.8
 # DESCRIPTION: Dotfiles Framework Controller
 # AUTHOR:      Stony64
 # LAST UPDATE: 2026-02-16
-# CHANGES:     3.6.7 - Fix set -e compatibility with && continue patterns
+# CHANGES:     3.6.8 - Fix rm alias conflict with command rm
 # --------------------------------------------------------------------------
 
 set -euo pipefail
@@ -162,13 +162,13 @@ backup_dotfiles() {
 
     if [[ ${backed_up} -eq 0 ]]; then
         df_log_warn "No files found to backup."
-        rmdir "${current_backup_dir}" 2>/dev/null || true
+        command rm -rf "${current_backup_dir}" 2>/dev/null || true
         return 0
     fi
 
     # Use subshell for cd to maintain working directory
     if (cd "${backup_root}" && tar czf "backup-${timestamp}.tar.gz" "${timestamp}" 2>/dev/null); then
-        rm -rf "${current_backup_dir}"
+        command rm -rf "${current_backup_dir}"
         local backup_size
         backup_size=$(du -sh "${backup_root}/backup-${timestamp}.tar.gz" 2>/dev/null | cut -f1)
         df_log_success "Backup created: backup-${timestamp}.tar.gz (${backed_up} files, ${backup_size})"
@@ -209,12 +209,12 @@ deploy_dotfiles() {
         local filename
         filename="$(basename "${src}")"
 
-        # Skip backup files - USE IF instead of && to avoid set -e issues
+        # Skip backup files
         if [[ "${filename}" == *.bak* ]]; then
             continue
         fi
 
-        # Skip directories - USE IF instead of && to avoid set -e issues
+        # Skip directories
         if [[ -d "${src}" ]]; then
             continue
         fi
@@ -233,12 +233,12 @@ deploy_dotfiles() {
             fi
         fi
 
-        # Remove old symlink if exists
+        # Remove old symlink if exists (USE command rm to bypass alias!)
         if [[ -L "${dest}" ]]; then
-            rm -f "${dest}"
+            command rm -f "${dest}"
         fi
 
-        # Create symlink (removed -n flag for better compatibility)
+        # Create symlink
         if ln -sf "${src}" "${dest}" 2>/dev/null; then
             df_log_success "Linked: ${filename}"
             ((deployed_count++))
@@ -287,7 +287,7 @@ check_status() {
         local filename
         filename="$(basename "${source}")"
 
-        # Skip directories (like .config) - USE IF instead of && to avoid set -e issues
+        # Skip directories
         if [[ -d "${source}" ]]; then
             continue
         fi
@@ -351,9 +351,9 @@ remove_links() {
         filename="$(basename "${src}")"
         local target="${HOME}/${filename}"
 
-        # Remove symlink if it exists
+        # Remove symlink if it exists (USE command rm to bypass alias!)
         if [[ -L "${target}" ]]; then
-            if rm "${target}" 2>/dev/null; then
+            if command rm -f "${target}" 2>/dev/null; then
                 df_log_info "Removed link: ${filename}"
                 ((removed_links++))
             else
@@ -366,7 +366,7 @@ remove_links() {
             # Find all .bak_* files for this filename
             for backup in "${HOME}/${filename}".bak_*; do
                 if [[ -e "${backup}" ]]; then
-                    if rm "${backup}" 2>/dev/null; then
+                    if command rm -f "${backup}" 2>/dev/null; then
                         df_log_info "Removed backup: $(basename "${backup}")"
                         ((removed_backups++))
                     else
