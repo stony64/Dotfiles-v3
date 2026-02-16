@@ -6,99 +6,447 @@
 # CHANGES:     v3.6.7 - Remove Python/Docker/JS (not in framework scope)
 # ------------------------------------------------------------------------------
 
+# ==============================================================================
+# EDITORCONFIG PURPOSE
+# ==============================================================================
+# EditorConfig helps maintain consistent coding styles across:
+#   - Different editors (VS Code, Vim, Emacs, Nano, Sublime, IntelliJ)
+#   - Different developers (team collaboration)
+#   - Different projects (organization-wide standards)
+#
+# How it works:
+#   1. Editor reads .editorconfig when opening a file
+#   2. Applies settings automatically (no manual configuration)
+#   3. Settings cascade from root to file location
+#   4. More specific rules override general rules
+#
+# Supported editors (with plugins):
+#   - VS Code: Native support (no plugin needed)
+#   - Vim/Neovim: editorconfig-vim plugin
+#   - Emacs: editorconfig-emacs package
+#   - Sublime Text: EditorConfig plugin
+#   - IntelliJ/PyCharm: Native support
+#
+# Documentation: https://editorconfig.org
+# ==============================================================================
+
+# root = true
+#   Tells editor to STOP searching for .editorconfig in parent directories
+#   Without this: Editor would keep looking up to filesystem root
+#   With this: Settings are self-contained in this repository
+#
+# Why important:
+#   - Prevents user's global ~/.editorconfig from interfering
+#   - Ensures consistent settings within project
+#   - Performance: Editor stops searching after finding root
 root = true
 
+
 # --- GLOBAL UNIX STANDARDS ----------------------------------------------------
+# Default settings for ALL files (unless overridden below)
+# These represent Unix/Linux best practices
+#
+# Pattern: [*] matches ANY file in repository
+# More specific patterns below override these defaults
+
 [*]
+# charset = utf-8
+#   Character encoding for file content
+#   utf-8: Universal encoding, supports all languages/symbols
+#   Why not ASCII: Doesn't support special characters (ä, ö, ü, emojis)
+#   Why not latin1: Limited character set (Western European only)
+#   Why utf-8: Standard for modern systems, backward-compatible with ASCII
 charset = utf-8
+
+# end_of_line = lf
+#   Line ending style (Unix/Linux/macOS standard)
+#   Options: lf (Unix), crlf (Windows), cr (Old Mac - obsolete)
+#   Why lf: Framework targets Linux (Debian, Proxmox)
+#   Impact: Shell scripts REQUIRE lf (bash fails with crlf)
+#   Example error with crlf: /usr/bin/env: 'bash\r': No such file or directory
 end_of_line = lf
+
+# insert_final_newline = true
+#   Ensures file ends with newline character
+#   POSIX standard: Text files MUST end with newline
+#   Why important:
+#     - cat file1 file2 works correctly (last line of file1 separate from first line of file2)
+#     - Git diffs cleaner (no "No newline at end of file" warning)
+#     - Some tools expect trailing newline (wc -l, tail)
+#   Example without final newline:
+#     $ cat -A file
+#     line1$
+#     line2 (no $ = no newline, causes issues)
 insert_final_newline = true
+
+# trim_trailing_whitespace = true
+#   Remove spaces/tabs at end of lines on save
+#   Why remove:
+#     - No functional purpose (invisible, useless)
+#     - Causes noisy Git diffs (whitespace-only changes)
+#     - Some linters warn about trailing whitespace
+#   Exception: Markdown (uses trailing spaces for <br>, disabled below)
 trim_trailing_whitespace = true
+
+# indent_style = space
+#   Use spaces (not tabs) for indentation
+#   Options: space, tab
+#   Why spaces (default):
+#     - Consistent appearance across editors (tabs render differently)
+#     - Precise alignment (spaces always 1 character wide)
+#     - Industry standard for most languages (Python, JS, YAML)
+#   When tabs: Makefiles (MUST use tabs, see section below)
 indent_style = space
+
+# indent_size = 4
+#   Number of spaces per indentation level
+#   Options: 2 (compact), 4 (readable), 8 (old style)
+#   Why 4 for bash:
+#     - Google Shell Style Guide recommends 2, but 4 is more common
+#     - Better readability for nested if/for/while
+#     - Matches framework convention
+#   Exceptions:
+#     - JSON/YAML: 2 spaces (community standard)
+#     - Makefiles: 8-space tabs (GNU Make convention)
 indent_size = 4
+
+# max_line_length = 120
+#   Maximum characters per line before wrap
+#   Options: 80 (classic), 100 (modern), 120 (wide), off (no limit)
+#   Why 120:
+#     - Modern monitors support wide lines (not limited to 80-column terminals)
+#     - Balance: Readable without excessive wrapping
+#     - Wide enough for complex bash expressions
+#     - Still fits side-by-side diffs on 1080p monitors
+#   Exceptions:
+#     - Markdown: off (natural line wrapping by renderer)
+#     - Long URLs, paths, or data: off (can't wrap)
 max_line_length = 120
 
+
 # --- MAKEFILES (SACRED TABS!) -------------------------------------------------
+# GNU Make REQUIRES tabs for recipe indentation
+# Critical: Makefiles with spaces WILL FAIL
+#
+# Pattern: {Makefile,makefile,*.mk,*.mak,GNUmakefile}
+#   Matches: Makefile, makefile, rules.mk, config.mak, GNUmakefile
+#   Brace expansion: Multiple patterns in one rule
+#
+# Why tabs mandatory:
+#   - Make distinguishes recipes (tabs) from variable assignments (no tabs)
+#   - Historical: Make predates spaces-vs-tabs debate (1976)
+#   - Spec: POSIX requires tab character (0x09) before recipe commands
+#
+# Common error with spaces:
+#   Makefile:5: *** missing separator. Stop.
+#   (Make can't find tab character before recipe)
+
 [{Makefile,makefile,*.mk,*.mak,GNUmakefile}]
+# indent_style = tab
+#   MUST be tab (not space) for Make compatibility
 indent_style = tab
+
+# indent_size = 8
+#   Tab width = 8 spaces (GNU Make convention)
+#   Why 8: Historical standard (terminal default tab stop)
+#   Editor display: Tab appears as 8 spaces wide (but stored as 0x09)
 indent_size = 8
+
+# trim_trailing_whitespace = false
+#   Don't remove trailing whitespace in Makefiles
+#   Why disabled:
+#     - Some Makefiles use trailing whitespace intentionally
+#     - Make variables may include trailing spaces
+#     - Removing might break legacy Makefiles
+#   Example: VAR = value  (trailing space may be intentional)
 trim_trailing_whitespace = false
 
+
 # --- BASH/SHELL FRAMEWORK (4 SPACES) ------------------------------------------
+# Shell scripts and bash modules
+# Consistent 4-space indentation for readability
+#
+# Pattern: *.{sh,bash,zsh,fish}
+#   Matches: script.sh, module.bash, init.zsh, config.fish
+#   Covers: All shell script types in framework
+
 [*.{sh,bash,zsh,fish}]
+# indent_style = space
+#   Use spaces (not tabs) for bash scripts
+#   Why spaces:
+#     - Google Shell Style Guide recommends 2, but 4 is common
+#     - Clear visual hierarchy (if/for/function nesting)
+#     - No tab-width ambiguity (tabs render as 4/8 spaces depending on editor)
 indent_style = space
+
+# indent_size = 4
+#   4 spaces per indentation level
+#   Why 4 (not 2):
+#     - Better readability for complex bash logic
+#     - Matches other languages in polyglot repos
+#     - Framework convention (consistency across all scripts)
 indent_size = 4
 
-# Dotfiles Framework Core
+# Dotfiles Framework Core (main executables)
+# Explicit patterns for framework entry points
+# Ensures these always get 4-space indent (even if pattern changes)
 [{dotfilesctl.sh,core.sh,collect-review.sh}]
 indent_style = space
 indent_size = 4
 
-# Bash Library Modules
+# Bash Library Modules (framework utilities)
+# Pattern: lib/*.sh matches lib/logging.sh, lib/validators.sh
+# All library scripts get consistent indentation
 [lib/*.sh]
 indent_style = space
 indent_size = 4
 
-# Sourced Dotfiles (no shebang)
+# Sourced Dotfiles (no shebang, loaded via 'source')
+# These files are bash configuration, not executables
+# Pattern: Explicit list of dotfiles (no wildcards to avoid false matches)
+# Includes: .bashrc, .bashenv, .bashprompt, .bashaliases, .bashfunctions, .bashwartung
 [{.bashrc,.bashenv,.bashprompt,.bashaliases,.bashfunctions,.bashwartung,.bash_profile,.bash_logout}]
 indent_style = space
 indent_size = 4
 
-# Shell Config Files
+# Shell Config Files (editor and linter configs)
+# .dircolors: LS_COLORS definition (sourced by bash)
+# .nanorc: Nano editor configuration
+# .shellcheckrc: ShellCheck linter configuration
 [{.dircolors,.nanorc,.shellcheckrc}]
 indent_style = space
 indent_size = 4
 
+
 # --- MARKDOWN (FREE FORM) -----------------------------------------------------
+# Markdown documentation files
+# Special handling: Preserve formatting, disable line length
+#
+# Pattern: *.{md,mdx}
+#   md: Standard Markdown (README.md, CHANGELOG.md)
+#   mdx: Markdown with JSX (not used in framework, but defined)
+
 [*.{md,mdx}]
+# trim_trailing_whitespace = false
+#   DON'T remove trailing spaces in Markdown
+#   Why disabled:
+#     - Markdown uses 2 trailing spaces for line break (<br>)
+#     - Without spaces: Lines merge into single paragraph
+#     - Example:
+#         Line 1  (2 spaces = <br>)
+#         Line 2
+#   Alternative: Use backslash (Line 1\) but spaces are more common
 trim_trailing_whitespace = false
+
+# max_line_length = off
+#   No line length limit for Markdown
+#   Why disabled:
+#     - Markdown renderers handle wrapping automatically
+#     - Hard-wrapping breaks rendering (unexpected line breaks)
+#     - Long URLs, code blocks shouldn't be wrapped
+#   Editor: Use soft wrap (view only) instead of hard wrap (actual newlines)
 max_line_length = off
+
 
 # --- JSON/YAML (2 SPACES STANDARD) --------------------------------------------
+# Configuration files using JSON/YAML formats
+# Industry standard: 2-space indentation (compact, readable)
+
+# JSON and JSON with Comments (JSONC)
+# Used by: VS Code settings, package.json, .markdownlint.jsonc
 [*.{json,jsonc}]
+# indent_style = space
+#   JSON spec doesn't care, but spaces are convention
 indent_style = space
+
+# indent_size = 2
+#   2 spaces per level (community standard)
+#   Why 2 (not 4):
+#     - JSON tends to be deeply nested (compact saves space)
+#     - Node.js/JavaScript ecosystem uses 2 spaces
+#     - npm, prettier, ESLint all default to 2
 indent_size = 2
+
+# max_line_length = 100
+#   Shorter than bash (120) for readability
+#   Why 100:
+#     - JSON objects with many properties benefit from shorter lines
+#     - Easier to read nested structures
+#     - Matches prettier default
 max_line_length = 100
 
+# YAML configuration files
+# Used by: GitHub Actions, Docker Compose, Ansible
 [*.{yml,yaml}]
+# indent_style = space
+#   YAML spec REQUIRES spaces (tabs forbidden)
+#   Tabs in YAML: Syntax error (parser rejects)
 indent_style = space
+
+# indent_size = 2
+#   2 spaces per level (YAML community standard)
+#   Why 2 (not 4):
+#     - YAML is whitespace-sensitive (deep nesting common)
+#     - 2 spaces saves horizontal space
+#     - Most YAML examples use 2 spaces
+#   Warning: Mixing 2/4 spaces breaks YAML (inconsistent indentation error)
 indent_size = 2
+
+# max_line_length = 120
+#   Same as bash (120 characters)
+#   Why 120:
+#     - YAML often contains long strings (URLs, paths, commands)
+#     - GitHub Actions workflows have long run: commands
+#     - Balance between readability and wrapping
 max_line_length = 120
 
+
 # --- TOML (2 SPACES) ----------------------------------------------------------
+# TOML configuration files
+# Used by: Rust (Cargo.toml), Python (pyproject.toml)
+#
+# Note: Not actively used in framework (bash-focused)
+# Defined for completeness if added later
+
 [*.toml]
+# indent_style = space
+#   TOML allows tabs, but spaces are convention
 indent_style = space
+
+# indent_size = 2
+#   2 spaces per level (Rust/Cargo convention)
+#   Why 2: Matches JSON/YAML (config file consistency)
 indent_size = 2
+
 
 # --- WINDOWS FILES (CRLF) -----------------------------------------------------
+# Windows-specific scripts that REQUIRE CRLF line endings
+# cmd.exe and PowerShell expect CRLF (may fail with LF)
+
+# Batch files and PowerShell scripts
+# Pattern: *.{bat,cmd,ps1,psm1}
+#   bat/cmd: DOS/Windows batch files
+#   ps1: PowerShell script
+#   psm1: PowerShell module
 [*.{bat,cmd,ps1,psm1}]
+# end_of_line = crlf
+#   Force Windows line endings (CR+LF)
+#   Why CRLF:
+#     - cmd.exe: Historically requires CRLF (may work with LF, not guaranteed)
+#     - PowerShell: Accepts LF but CRLF is convention
+#     - Windows text editors expect CRLF (Notepad shows ^M with LF)
 end_of_line = crlf
+
+# indent_style = space
+#   Use spaces (tabs allowed but spaces preferred)
 indent_style = space
+
+# indent_size = 4
+#   4 spaces per level (PowerShell convention)
+#   Why 4: Microsoft coding guidelines recommend 4 spaces
 indent_size = 4
+
 
 # --- PROXMOX/SYSTEM CONFIGS ---------------------------------------------------
+# Proxmox VE and system configuration files
+# These are read by system services (may have specific format requirements)
+
+# Pattern: {*.pve,*.conf,*.cfg,mc/ini}
+#   *.pve: Proxmox VE config files
+#   *.conf: Generic config (Apache, Nginx, systemd)
+#   *.cfg: Alternative config extension
+#   mc/ini: Midnight Commander settings
 [{*.pve,*.conf,*.cfg,mc/ini}]
+# indent_style = space
+#   Use spaces (most config parsers accept both, spaces safer)
 indent_style = space
+
+# indent_size = 4
+#   4 spaces per level (readability)
+#   Why 4: Matches bash scripts (consistency)
 indent_size = 4
+
+# max_line_length = off
+#   No line length limit
+#   Why disabled:
+#     - Config files may have long paths, URLs, or data
+#     - Wrapping might break parser
+#     - Example: path = /very/long/absolute/path/to/resource
 max_line_length = off
+
 
 # --- ZFS/STORAGE CONFIGS ------------------------------------------------------
+# ZFS filesystem and storage configuration
+# These are specialized system configs (format may vary)
+
 [{*.zfs,*.pool}]
+# indent_style = space
+#   Use spaces (safe default)
 indent_style = space
+
+# indent_size = 4
+#   4 spaces per level (matches system configs)
 indent_size = 4
+
 
 # --- LINTER CONFIGS -----------------------------------------------------------
+# Configuration files for development tools
+# These define project coding standards
+
+# Pattern: {.markdownlint*,.shellcheckrc,.editorconfig,.gitignore,.gitattributes}
+#   .markdownlint*: Markdown linter config
+#   .shellcheckrc: Shell script linter config
+#   .editorconfig: This file
+#   .gitignore: Git ignore patterns
+#   .gitattributes: Git file attributes
 [{.markdownlint*,.shellcheckrc,.editorconfig,.gitignore,.gitattributes}]
+# indent_style = space
+#   Use spaces (config file standard)
 indent_style = space
+
+# indent_size = 4
+#   4 spaces per level (matches framework scripts)
+#   Why 4: Consistency with bash scripts
 indent_size = 4
+
+# max_line_length = off
+#   No line length limit
+#   Why disabled:
+#     - .gitignore: May have long path patterns
+#     - .shellcheckrc: May have long disable lists
+#     - .gitattributes: May have long patterns
 max_line_length = off
 
+
 # --- GITHUB ACTIONS -----------------------------------------------------------
+# CI/CD workflow definitions for GitHub
+# YAML format with 2-space indentation (GitHub convention)
+
 [.github/workflows/*.{yml,yaml}]
+# indent_style = space
+#   YAML requires spaces (tabs forbidden)
 indent_style = space
+
+# indent_size = 2
+#   2 spaces per level (GitHub Actions examples use 2)
+#   Why 2: Matches YAML standard, GitHub documentation
 indent_size = 2
 
+
 # --- GIT CONFIGS --------------------------------------------------------------
+# Git internal configuration files
+# Git's own config format uses tabs (historical)
+
 [{.gitconfig,.gitmodules}]
+# indent_style = tab
+#   Git config format uses tabs for indentation
+#   Why tabs:
+#     - Git's own format (git config generates tabs)
+#     - Consistency with Git's internal representation
+#     - git config --global writes tabs
 indent_style = tab
+
+# indent_size = 8
+#   Tab width = 8 spaces (Git convention)
+#   Why 8: Matches Make convention (historical standard)
 indent_size = 8

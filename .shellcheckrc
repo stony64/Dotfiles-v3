@@ -6,62 +6,223 @@
 # CHANGES:     v3.6.7 - Enable severity=warning (focus on actionable issues)
 # ------------------------------------------------------------------------------
 
+# ==============================================================================
+# ShellCheck Configuration File
+# ==============================================================================
+# This file configures ShellCheck behavior for the entire dotfiles framework.
+# Place in repository root to apply settings to all scripts automatically.
+#
+# Rationale:
+#   - Consistent linting across all shell scripts
+#   - Framework-specific exceptions (dynamic sourcing, exports)
+#   - Balance between strictness and practicality
+#   - Focus on bugs/security, not style preferences
+#
+# Documentation: https://www.shellcheck.net/wiki/
+# ==============================================================================
+
 # --- SHELL & COMPATIBILITY ----------------------------------------------------
+# Specifies target shell dialect for analysis
+# Options: sh, bash, dash, ksh
+#
+# Why bash?
+#   - Framework requires bash-specific features (arrays, [[ ]], etc.)
+#   - Not POSIX sh (would flag bash-isms incorrectly)
+#   - All target systems (Debian, Proxmox) have bash
+#
+# Impact:
+#   - Enables bash-specific syntax checking
+#   - Allows bash built-ins (mapfile, [[, etc.)
+#   - Disables warnings for bash-specific features
 shell=bash
 
 # --- SOURCE PATH RESOLUTION ---------------------------------------------------
-# SCRIPTDIR = directory of the script being checked
+# Defines how ShellCheck resolves 'source' statements
+# SCRIPTDIR = directory containing the script being checked
+#
+# Why SCRIPTDIR?
+#   - Allows relative sourcing: source ./lib/functions.sh
+#   - Framework modules are in same directory tree
+#   - Portable across different installation paths
+#
+# Alternative options:
+#   - Absolute path: source-path=/opt/dotfiles
+#   - Multiple paths: source-path=SCRIPTDIR:/usr/local/lib
+#
+# Impact:
+#   - ShellCheck can follow source statements
+#   - Better detection of undefined functions/variables
+#   - Fewer false positives for cross-module dependencies
 source-path=SCRIPTDIR
 
 # --- GLOBALLY DISABLED CHECKS -------------------------------------------------
-# SC1090/1091 - Dynamic sourcing (source "$variable")
-#   Reason: Framework uses dynamic module loading
+# Framework-specific exceptions where ShellCheck warnings are not applicable
 #
-# SC2148 - Missing shebang
-#   Reason: Sourced library files don't need shebang
-#
-# SC2034 - Unused variables
-#   Reason: Framework exports variables for user scripts
-#
-# SC2086 - Unquoted word splitting
-#   Reason: Intentional in some aliases (e.g., ls flags)
-#
-# SC2312 - Invoke separately for better error handling
-#   Reason: Framework uses $(cmd || fallback) patterns
+# Philosophy:
+#   - Disable only when absolutely necessary
+#   - Document reason for each exception
+#   - Review periodically (are they still needed?)
 
+# SC1090/SC1091 - Dynamic sourcing (source "$variable")
+#   Triggered by: source "$DF_CORE" or source "${HOME}/.bashenv"
+#   Reason: Framework uses dynamic module loading based on environment
+#   False positive: ShellCheck can't statically analyze variable paths
+#   Example:
+#     source "${DF_REPO_ROOT}/core.sh"  # Path depends on installation
+#
+# SC2148 - Missing shebang in sourced files
+#   Triggered by: .bashrc, .bashenv, .bashaliases (no #!/usr/bin/env bash)
+#   Reason: These are library files (sourced), not executables
+#   Convention: Only executables need shebang, sourced files don't
+#   Example:
+#     .bashrc        # No shebang (sourced by bash)
+#     script.sh      # Has shebang (executed directly)
+#
+# SC2034 - Unused variable (appears unused)
+#   Triggered by: export VAR="value" (used by child processes)
+#   Reason: Framework exports variables for user scripts
+#   False positive: ShellCheck doesn't track cross-script usage
+#   Example:
+#     export DF_REPO_ROOT="/opt/dotfiles"  # Used by sourced modules
+#
+# SC2086 - Unquoted variable (word splitting)
+#   Triggered by: tar $tar_opts file.tar
+#   Reason: Intentional word splitting for flag expansion
+#   Use case: Dynamic command arguments stored in variables
+#   Example:
+#     tar_opts="-czf"  # Multiple flags as string
+#     tar $tar_opts    # Expands to: tar -c -z -f (intentional)
+#
+# SC2312 - Masking return value of command substitution
+#   Triggered by: local var=$(cmd1 || cmd2)
+#   Reason: Framework uses $(cmd || fallback) patterns for robustness
+#   Design choice: Prefer graceful fallback over strict error handling
+#   Example:
+#     local ip=$(curl api.ipify.org || curl ifconfig.me)  # Fallback to second service
 disable=SC1090,SC1091,SC2148,SC2034,SC2086,SC2312
 
 # --- ENABLED STRICT CHECKS ----------------------------------------------------
-# quote-safe-variables           - Warn about unquoted variables
-# check-set-e-suppressed         - Warn when set -e is disabled in conditions
-# check-indirect-interactive-source - Warn about interactive-only sourcing
+# Additional checks beyond default set (opt-in features)
+#
+# These are optional checks that catch subtle issues but may increase
+# false positives. Enable based on project maturity and risk tolerance.
 
+# quote-safe-variables
+#   What: Warns about potentially unsafe variable references
+#   Catches: Unquoted $var in contexts where word splitting could break
+#   Example:
+#     rm $file        # BAD: Breaks if file="my document.txt"
+#     rm "$file"      # GOOD: Handles spaces correctly
+#   Trade-off: May flag intentional word splitting (use SC2086 disable)
+#
+# check-set-e-suppressed
+#   What: Warns when 'set -e' is disabled in conditional contexts
+#   Catches: Commands in if/while/|| that suppress set -e
+#   Example:
+#     set -e
+#     if cmd; then ...  # Disables set -e for 'cmd' (may hide errors)
+#   Rationale: Helps catch unintended error suppression
+#   Note: Framework uses 'set -o pipefail' but not 'set -e' globally
+#
+# check-indirect-interactive-source
+#   What: Warns about interactive-only sourcing patterns
+#   Catches: Sourcing files that modify interactive shell behavior in scripts
+#   Example:
+#     #!/bin/bash
+#     source ~/.bashrc  # BAD: .bashrc is interactive-only
+#   Rationale: Prevents accidental interactive behavior in scripts
+#   Framework impact: Ensures clear separation (scripts vs interactive)
 enable=quote-safe-variables,check-set-e-suppressed,check-indirect-interactive-source
 
 # --- OUTPUT FORMATTING --------------------------------------------------------
+# Controls how ShellCheck presents findings
+
+# color=always
+#   Enables colored output for better readability
+#   Options: always, never, auto
+#   always: Force colors even when piped (for CI/CD with color support)
+#   never: Disable colors (for plain text logs)
+#   auto: Enable colors only for terminal output (default)
+#
+# Why always?
+#   - Modern CI/CD supports ANSI colors (GitHub Actions, GitLab CI)
+#   - Easier to spot errors in log output
+#   - Can be overridden with --color=never if needed
 color=always
+
+# format=gcc
+#   Output format compatible with GCC compiler messages
+#   Format: file:line:column: level: message [SCxxxx]
+#   Example: script.sh:42:5: warning: Quote this to prevent word splitting. [SC2086]
+#
+# Why GCC format?
+#   - Standard format recognized by most IDEs/editors
+#   - Clickable links in VS Code, vim, emacs
+#   - Easy to parse for CI/CD (grep, awk)
+#
+# Alternative formats:
+#   - checkstyle: XML format for Jenkins/SonarQube
+#   - json: Machine-readable for custom tooling
+#   - tty: Human-readable (default for interactive use)
 format=gcc
 
 # --- EXTERNAL SOURCES ---------------------------------------------------------
-# Allow sourcing files from outside the repository
-# Useful for framework modules in /opt/dotfiles
+# Controls whether ShellCheck follows sources outside repository
+
+# external-sources=true
+#   Allows ShellCheck to analyze files outside the repository
+#   Useful for: Framework modules in /opt/dotfiles, system libraries
+#
+# Why enable?
+#   - Framework may be installed system-wide (/opt/dotfiles)
+#   - Need to check cross-references (core.sh → modules)
+#   - Better detection of undefined functions/variables
+#
+# Security note:
+#   - ShellCheck only reads files, doesn't execute
+#   - Safe to enable for trusted source paths
+#   - Disable if scanning untrusted code (set to false)
+#
+# Impact:
+#   - More comprehensive analysis (follows all sources)
+#   - Longer scan time (more files to check)
+#   - Better accuracy (fewer "function not defined" false positives)
 external-sources=true
 
 # --- SEVERITY THRESHOLD -------------------------------------------------------
-# Only report warnings and errors (suppress info/style suggestions)
+# Filters which issues are reported based on severity level
+#
+# Severity hierarchy (most to least severe):
+#   error   → Critical bugs (syntax errors, undefined behavior, crashes)
+#   warning → Important issues (potential bugs, portability problems)
+#   info    → Informational (optimization suggestions, best practices)
+#   style   → Stylistic (formatting, naming conventions, code style)
+
+# severity=warning
+#   Only report warnings and errors (suppress info/style)
+#
 # Rationale:
 #   - Focus on actionable issues (bugs, compatibility, security)
 #   - Reduce noise from subjective style preferences
 #   - Improve signal-to-noise ratio in CI/CD
 #   - Framework code is production-ready, not experimental
+#   - Style consistency enforced by code review, not linter
 #
-# Severity levels:
-#   error   - Critical issues (syntax errors, undefined behavior)
-#   warning - Important issues (potential bugs, portability)
-#   info    - Informational (optimization suggestions)
-#   style   - Stylistic suggestions (formatting, conventions)
+# What's suppressed (info/style):
+#   - "Use $(..) instead of legacy `..`" (style)
+#   - "Consider using [[ ]] instead of [ ]" (style)
+#   - "Use read -r to prevent backslash interpretation" (info)
+#
+# What's still reported (warning/error):
+#   - "Quote to prevent word splitting" (warning)
+#   - "Variable used but not assigned" (warning)
+#   - "Syntax error near token" (error)
 #
 # To see all suggestions during development:
 #   shellcheck --severity=style <file>
+#   (Useful for code review, but too noisy for CI/CD)
 #
+# To see only critical errors:
+#   shellcheck --severity=error <file>
+#   (Use for quick checks, may miss important warnings)
 severity=warning

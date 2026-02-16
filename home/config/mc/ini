@@ -6,171 +6,1016 @@
 # CHANGES:     v3.6.7 - Refined ShellCheck disables, add command timeouts
 # ------------------------------------------------------------------------------
 
-# ShellCheck: MC INI file uses [Section] syntax not valid in shell scripts
-# Only disable INI-specific syntax warnings, not general shell issues
-# shellcheck disable=SC1073,SC1072  # INI: [Sections] and key=value syntax
-# shellcheck source=/dev/null       # Not a sourceable shell script
+# ==============================================================================
+# MIDNIGHT COMMANDER CONFIGURATION
+# ==============================================================================
+# Midnight Commander (MC) is a visual file manager for the terminal
+# Features:
+#   - Two-panel interface (like Norton Commander, Total Commander)
+#   - Built-in viewer/editor
+#   - FTP/SFTP support
+#   - Archive browsing (tar, zip, deb, rpm)
+#   - Virtual filesystem (VFS) for special operations
+#
+# This configuration:
+#   - Optimizes for system administration (Proxmox, ZFS, Docker)
+#   - Adds safety confirmations (production environment)
+#   - Integrates with external tools (git, docker, zfs)
+#   - Uses modern 256-color theme (gotar)
+#
+# Location: ~/.config/mc/ini
+# Generated: Automatically by MC, manual edits preserved
+# Documentation: man mc, F1 in MC
+# ==============================================================================
+
+# ShellCheck configuration for INI file format
+# INI files use [Section] syntax and key=value pairs (not valid shell syntax)
+# We disable INI-specific warnings but keep shell command validation
+
+# shellcheck disable=SC1073,SC1072
+#   SC1073: Couldn't parse this [Section] block
+#   SC1072: Expected end of expression (key=value not shell syntax)
+#   Why disable: INI format requires these, not shell script errors
+#   Keep enabled: SC2086 (unquoted variables), SC2046 (word splitting)
+#   This allows checking Panelize commands without false INI syntax errors
+
+# shellcheck source=/dev/null
+#   Don't try to source this file (it's not a shell script)
+#   This is a config file read by MC, not sourced by bash
+
 
 [Midnight-Commander]
-# --- CORE BEHAVIOR ------------------------------------------------------------
+# ==============================================================================
+# CORE BEHAVIOR
+# ==============================================================================
+# Fundamental MC settings affecting overall behavior
+
+# shell_patterns=true
+#   Enable shell-style wildcards in selection
+#   true: * ? [abc] work like shell (Select: *.log)
+#   false: Regex only (less intuitive)
+#   Why true: Familiar syntax for sysadmins
+#   Usage: + (select files) → *.conf → Enter
 shell_patterns=true
+
+# auto_save_setup=true
+#   Automatically save MC settings on exit
+#   true: Panel layout, sort order, filters saved
+#   false: Manual save required (:save)
+#   Why true: Convenience (remember last session)
+#   Saved: Panel sizes, sort, filters, history, hotlist
 auto_save_setup=true
+
+# use_internal_view=true
+#   Use MC's built-in file viewer (F3)
+#   true: Fast, syntax highlighting, hex view
+#   false: External viewer (less, most)
+#   Why true: Integrated experience, faster
+#   Features: Syntax highlight, hex mode (F4), search (F7)
 use_internal_view=true
-use_internal_edit=false       # External: nano/micro
+
+# use_internal_edit=false
+#   Use MC's built-in editor (F4) or external editor
+#   false: Use $EDITOR (nano, micro, vim)
+#   true: Use MCEdit (internal editor)
+#   Why false: External editors more powerful (nano/micro configured)
+#   External editor: Set via $EDITOR in .bashenv
+#   MCEdit: Basic editor, good for quick edits
+use_internal_edit=false
+
+# clear_before_exec=true
+#   Clear screen before executing commands
+#   true: Clean screen (no MC UI clutter)
+#   false: Keep MC UI visible
+#   Why true: Clearer command output
+#   Example: Enter → command → Clean output → Any key → Back to MC
 clear_before_exec=true
+
+# preallocate_space=false
+#   Preallocate disk space when copying files
+#   true: Reserve space before copy (prevents partial copies)
+#   false: Allocate as needed
+#   Why false: Faster, rarely needed (filesystems handle this)
+#   Use case: Copying large files on full disk (true prevents corruption)
 preallocate_space=false
+
+# verbose=true
+#   Show detailed progress during file operations
+#   true: File names, speeds, ETA
+#   false: Simple progress bar
+#   Why true: Better feedback for large operations
+#   Shows: Current file, bytes transferred, speed, time remaining
 verbose=true
-drop_menus=false              # F9 for menu access
+
+# drop_menus=false
+#   Automatically show menus on F9 press
+#   false: F9 activates menu bar (arrow keys to navigate)
+#   true: F9 opens menu dropdown immediately
+#   Why false: Traditional behavior (two-step: F9 → Right → Enter)
+#   Alternative: F9 → Left/Right → Down → Enter
+drop_menus=false
+
 
 # --- SAFETY (Proxmox Production) ----------------------------------------------
+# Confirmation dialogs for destructive operations
+# Rationale: Production environment (Proxmox) - prevent accidental data loss
+
+# confirm_delete=true
+#   Confirm before deleting files (F8)
+#   true: "Delete file?" dialog
+#   false: Delete immediately (dangerous!)
+#   Why true: Safety (production systems)
+#   Override: Shift+F8 (force delete without confirmation)
 confirm_delete=true
+
+# confirm_overwrite=true
+#   Confirm before overwriting existing files (F5/F6 copy/move)
+#   true: "Overwrite?" dialog
+#   false: Overwrite silently
+#   Why true: Prevent accidental data loss
+#   Options: Yes, No, All, Skip, Abort
 confirm_overwrite=true
+
+# confirm_execute=false
+#   Confirm before executing files (Enter on executable)
+#   false: Execute immediately
+#   true: "Execute?" dialog
+#   Why false: Convenience (executables are obvious)
+#   Safety: File must be +x (chmod +x) to execute
 confirm_execute=false
+
+# confirm_history_cleanup=true
+#   Confirm before clearing command/directory history
+#   true: "Clear history?" dialog
+#   false: Clear silently
+#   Why true: History useful (avoid accidental clear)
+#   History: Alt+H (command), Alt+D (directory)
 confirm_history_cleanup=true
+
+# confirm_exit=true
+#   Confirm before exiting MC (F10, Ctrl+Q)
+#   true: "Exit?" dialog (if changes made)
+#   false: Exit immediately
+#   Why true: Prevent accidental exit during file operations
+#   Bypass: Double F10 or Ctrl+Q (quick exit)
 confirm_exit=true
+
+# confirm_directory_hotlist_delete=false
+#   Confirm before deleting directory hotlist entry
+#   false: Delete silently
+#   true: "Delete hotlist entry?" dialog
+#   Why false: Hotlist is low-risk (just shortcuts)
+#   Hotlist: Ctrl+\ (add), Ctrl+Shift+\ (show)
 confirm_directory_hotlist_delete=false
+
+# safe_delete=false
+#   Move deleted files to trash instead of permanent deletion
+#   false: Permanent deletion (rm)
+#   true: Move to ~/.local/share/Trash/ (can recover)
+#   Why false: Simpler, faster (use backups for safety)
+#   Alternative: Use git, ZFS snapshots for recovery
 safe_delete=false
+
+# safe_overwrite=false
+#   Create backup (~) before overwriting files
+#   false: Overwrite directly
+#   true: Rename old file to filename~ before overwrite
+#   Why false: Version control (git) handles backups
+#   When true: file.txt → file.txt~ (old), file.txt (new)
 safe_overwrite=false
 
+
 # --- UI/UX (Terminal optimized) -----------------------------------------------
+# User interface and experience settings
+
+# auto_menu=false
+#   Automatically show menu on mouse hover
+#   false: Menu requires F9 or click
+#   true: Menu appears on hover (annoying in terminal)
+#   Why false: Intentional menu access (avoid accidental popups)
 auto_menu=false
+
+# pause_after_run=1
+#   Pause after running command to view output
+#   0 = never, 1 = on error, 2 = always
+#   Why 1: See error messages (success exits immediately)
+#   Example: Command fails → "Press any key" → Review error
 pause_after_run=1
+
+# old_esc_mode=true
+#   Single Esc press closes dialogs
+#   true: Esc alone closes (modern behavior)
+#   false: Requires double-Esc (old behavior)
+#   Why true: Faster, modern convention
+#   Compatibility: Single Esc may conflict with Esc+key sequences
 old_esc_mode=true
+
+# old_esc_mode_timeout=1000000
+#   Timeout for Esc key (microseconds = 1 second)
+#   1000000µs = 1s (detect single Esc vs Esc+key)
+#   Why 1s: Enough time to type Esc+key sequences
+#   Too short: Esc+key interpreted as separate keys
+#   Too long: Slow dialog close
 old_esc_mode_timeout=1000000
+
+# cd_symlinks=true
+#   cd through symlinks resolves to real path
+#   true: cd symlink → show real path
+#   false: cd symlink → keep symlink in path
+#   Why true: Clarity (see actual location)
+#   Example: /var/www → /var/www/html (real path shown)
 cd_symlinks=true
+
+# show_all_if_ambiguous=false
+#   Show all completions immediately on Tab
+#   false: Beep if ambiguous, Tab twice to show
+#   true: Show completion list on first Tab
+#   Why false: Traditional shell behavior (bash-like)
+#   Behavior: Tab → beep → Tab → show options
 show_all_if_ambiguous=false
+
+# use_file_to_guess_type=true
+#   Use 'file' command to detect file types
+#   true: Better MIME detection (file --mime-type)
+#   false: Extension-based only
+#   Why true: Accurate for files without extensions
+#   Example: Script without .sh detected as shell script
 use_file_to_guess_type=true
+
+# shadows=true
+#   Draw shadows behind dialogs/menus
+#   true: Modern look (3D effect)
+#   false: Flat dialogs (classic look)
+#   Why true: Better visual separation
+#   Requires: 256-color terminal
 shadows=true
+
+# auto_fill_mkdir_name=true
+#   Auto-populate mkdir dialog with selected name
+#   true: F7 (mkdir) → Pre-filled with highlighted name
+#   false: Empty field
+#   Why true: Convenience (rename/copy pattern)
+#   Example: Highlight "backup" → F7 → "backup" pre-filled
 auto_fill_mkdir_name=true
 
+
 # --- MOUSE SUPPORT ------------------------------------------------------------
+# Mouse behavior in MC (click, drag, scroll)
+
+# mouse_move_pages_viewer=true
+#   Use mouse wheel to scroll in viewer (F3)
+#   true: Scroll wheel scrolls pages
+#   false: Arrow keys only
+#   Why true: Modern behavior (natural scrolling)
 mouse_move_pages_viewer=true
+
+# mouse_close_dialog=false
+#   Click outside dialog to close
+#   false: Requires explicit close (Esc, Cancel button)
+#   true: Click outside closes dialog
+#   Why false: Prevent accidental closes (safer)
 mouse_close_dialog=false
+
+# mouse_repeat_rate=100
+#   Mouse repeat rate (milliseconds)
+#   100ms = 10 events/second
+#   Why 100: Balance between responsiveness and control
+#   Lower: Faster scrolling (may be too fast)
+#   Higher: Slower scrolling (more control)
 mouse_repeat_rate=100
+
+# double_click_speed=250
+#   Double-click detection time (milliseconds)
+#   250ms = 0.25 seconds
+#   Why 250: Standard desktop speed
+#   Lower: Faster clicking required (harder)
+#   Higher: Slower clicking allowed (easier)
 double_click_speed=250
 
+
 # --- EDITOR (EditorConfig-sync: 4 spaces) -------------------------------------
+# Internal editor (MCEdit) settings - matches framework standards
+
+# editor_tab_spacing=4
+#   Tab width in editor
+#   4 spaces per tab (matches .editorconfig)
+#   Why 4: Framework standard (consistency)
+#   Alternative: 2 (compact), 8 (classic)
 editor_tab_spacing=4
+
+# editor_fill_tabs_with_spaces=true
+#   Convert Tab key to spaces
+#   true: Tab → 4 spaces (soft tabs)
+#   false: Tab → 0x09 character (hard tabs)
+#   Why true: Consistent rendering (.editorconfig)
+#   Exception: Makefiles require hard tabs (edit with nano)
 editor_fill_tabs_with_spaces=true
+
+# editor_return_does_auto_indent=true
+#   Auto-indent new lines to match previous line
+#   true: Enter → indent to same level
+#   false: Enter → start at column 0
+#   Why true: Code editing convenience
+#   Example: if [[ ]]; then → Enter → auto-indented
 editor_return_does_auto_indent=true
+
+# editor_option_save_position=true
+#   Remember cursor position per file
+#   true: Reopen at last position
+#   false: Always start at line 1
+#   Why true: Convenience (resume editing)
+#   Saved: ~/.cache/mc/filepos
 editor_option_save_position=true
+
+# editor_syntax_highlighting=true
+#   Enable syntax highlighting in editor
+#   true: Color code (bash, python, C, etc.)
+#   false: Plain text
+#   Why true: Readability (easier to spot errors)
+#   Syntax files: /usr/share/mc/syntax/
 editor_syntax_highlighting=true
+
+# editor_persistent_selections=true
+#   Keep selection after copy
+#   true: Selection stays highlighted
+#   false: Selection clears after copy
+#   Why true: Multiple operations on same selection
+#   Example: Select → Copy → Paste → Paste again
 editor_persistent_selections=true
+
+# editor_visible_tabs=true
+#   Show tab characters visually
+#   true: Tab → ⇥ or » (visible marker)
+#   false: Tab → spaces (invisible)
+#   Why true: Distinguish tabs from spaces (debugging)
+#   Useful: Mixed tab/space issues (Python, Makefiles)
 editor_visible_tabs=true
+
+# editor_visible_spaces=true
+#   Show trailing spaces visually
+#   true: Space → · (middle dot)
+#   false: Space → invisible
+#   Why true: Spot trailing whitespace (linter errors)
+#   Example: "line   " shows as "line···"
 editor_visible_spaces=true
+
+# editor_group_undo=true
+#   Group similar edits in undo history
+#   true: Typing "hello" = one undo (not 5)
+#   false: Each character = separate undo
+#   Why true: Sane undo behavior (undo words, not letters)
+#   Example: Type sentence → Undo → Entire sentence removed
 editor_group_undo=true
+
+# editor_state_full_filename=true
+#   Show full path in editor status line
+#   true: /full/path/to/file.txt
+#   false: file.txt (basename only)
+#   Why true: Clarity (know exact location)
+#   Useful: Multiple files with same name
 editor_state_full_filename=true
-skin=gotar                   # Modern dark theme
+
+# skin=gotar
+#   Color theme for MC interface
+#   gotar: Modern dark theme (256 colors)
+#   Why gotar: Professional, easy on eyes, good contrast
+#   Alternatives: modarin256, modarcon16, default
+#   Requires: 256-color terminal (TERM=xterm-256color)
+#   Location: /usr/share/mc/skins/
+skin=gotar
+
 
 [Layout]
-# --- PANEL LAYOUT -------------------------------------------------------------
+# ==============================================================================
+# PANEL LAYOUT
+# ==============================================================================
+# MC's two-panel layout configuration
+
+# menubar_visible=true
+#   Show menu bar at top
+#   true: File Edit Command... visible
+#   false: Hidden (access via F9)
+#   Why true: Discoverability (new users)
 menubar_visible=true
+
+# keybar_visible=true
+#   Show function key hints at bottom
+#   true: F1=Help F2=Menu F3=View ... visible
+#   false: Hidden (more space)
+#   Why true: Convenience (key reminders)
 keybar_visible=true
+
+# command_prompt=true
+#   Show command line at bottom
+#   true: Shell prompt visible (type commands)
+#   false: No command line
+#   Why true: Quick commands without leaving MC
+#   Usage: Type command → Enter → Execute
 command_prompt=true
+
+# xterm_title=true
+#   Update terminal title with current path
+#   true: Terminal title shows "MC: /current/path"
+#   false: Static title
+#   Why true: Context awareness (multiple terminals)
 xterm_title=true
+
+# free_space=true
+#   Show free disk space in panel footer
+#   true: "Free: 123GB / 500GB (25%)"
+#   false: No space info
+#   Why true: Useful for file operations (check space)
 free_space=true
+
+# message_visible=true
+#   Show hint bar above command line
+#   true: Tips displayed (e.g., "Hint: Use Ctrl+X to...")
+#   false: No hints
+#   Why true: Learning (discover features)
 message_visible=true
+
+# horizontal_split=false
+#   Split panels horizontally (top/bottom)
+#   false: Vertical split (left/right) - STANDARD
+#   true: Horizontal split (top/bottom)
+#   Why false: Side-by-side natural for file managers
+#   Change: Ctrl+U (toggle split orientation)
 horizontal_split=false
+
+# vertical_equal=true
+#   Equal width for both panels
+#   true: 50/50 split
+#   false: Adjustable (use mouse or Ctrl+Shift+Up/Down)
+#   Why true: Symmetry (equal visibility)
+#   Adjust: left_panel_size (if false)
 vertical_equal=true
+
+# left_panel_size=0.35
+#   Left panel width (percentage, 0.0-1.0)
+#   0.35 = 35% width (if vertical_equal=false)
+#   Why 0.35: Narrower left (navigation), wider right (content)
+#   Note: Ignored if vertical_equal=true
+#   Usage: Common pattern - narrow tree view, wide file list
 left_panel_size=0.35
+
+# output_lines=6
+#   Lines reserved for command output
+#   6 lines = enough for short command output
+#   Why 6: Balance (view output without hiding panels)
+#   Too small: Can't see output
+#   Too large: Panels shrink
+#   Toggle: Ctrl+O (hide/show panels)
 output_lines=6
 
+
 [Panels]
-# --- FILE DISPLAY OPTIONS -----------------------------------------------------
+# ==============================================================================
+# FILE DISPLAY OPTIONS
+# ==============================================================================
+# How files are displayed in panels
+
+# show_dot_files=true
+#   Show hidden files (starting with .)
+#   true: .bashrc, .gitignore visible
+#   false: Hidden files not shown
+#   Why true: Sysadmin needs hidden configs
+#   Toggle: Alt+. or Ctrl+H
 show_dot_files=true
+
+# show_backups=true
+#   Show backup files (ending with ~)
+#   true: file.txt~ visible
+#   false: Backup files hidden
+#   Why true: See all files (backup management)
+#   Example: nano creates file~ backups
 show_backups=true
+
+# show_mini_info=true
+#   Show file details in mini-status
+#   true: Size, perms, owner shown
+#   false: Filename only
+#   Why true: Context (file info without F3)
+#   Location: Between panels
 show_mini_info=true
+
+# mark_moves_down=true
+#   Move cursor down after marking file (Insert/Ctrl+T)
+#   true: Mark → cursor moves down
+#   false: Mark → cursor stays
+#   Why true: Faster multi-file selection
+#   Usage: Insert → Insert → Insert (mark multiple)
 mark_moves_down=true
+
+# reverse_files_only=true
+#   Reverse sort applies to files only (not dirs)
+#   true: Sort ↓ (Z→A) for files, ↑ (A→Z) for dirs
+#   false: Reverse both files and dirs
+#   Why true: Directories always sorted A→Z (easier navigation)
+#   Reverse: Ctrl+. (toggle sort order)
 reverse_files_only=true
+
+# navigate_with_arrows=true
+#   Use arrow keys to navigate (not Emacs-style)
+#   true: Up/Down/Left/Right arrows
+#   false: Ctrl+P/N/F/B (Emacs)
+#   Why true: Intuitive (standard arrows)
 navigate_with_arrows=true
+
+# panel_scroll_pages=true
+#   PgUp/PgDn scroll by pages
+#   true: Full page scroll
+#   false: Line-by-line
+#   Why true: Faster navigation (large directories)
 panel_scroll_pages=true
-quick_search_mode=2          # Incremental search
+
+# quick_search_mode=2
+#   Quick search behavior (type to search)
+#   0 = disabled (no quick search)
+#   1 = case-insensitive
+#   2 = incremental search (BEST)
+#   Why 2: Real-time search as you type
+#   Usage: Type filename → Highlights match → Type more → Narrows
+#   Example: Type "ba" → bashrc highlighted → "sh" → bashrc exact match
+quick_search_mode=2
+
+# mix_all_files=false
+#   Mix files and directories in listing
+#   false: Directories first, then files (STANDARD)
+#   true: Mixed (sorted together)
+#   Why false: Easier navigation (dirs at top)
 mix_all_files=false
-kilobyte_si=true             # 1000-based units (1KB = 1000 bytes)
+
+# kilobyte_si=true
+#   Use SI units (1000-based) instead of binary (1024-based)
+#   true: 1KB = 1000 bytes (SI standard)
+#   false: 1KB = 1024 bytes (binary)
+#   Why true: Matches disk manufacturers, modern convention
+#   Impact:
+#     SI: 1KB=1000, 1MB=1000KB, 1GB=1000MB
+#     Binary: 1KiB=1024, 1MiB=1024KiB, 1GiB=1024MiB
+kilobyte_si=true
+
+# filetype_mode=true
+#   Show file type icons/markers
+#   true: * (exec), / (dir), @ (link), | (pipe)
+#   false: No markers
+#   Why true: Quick file type identification
+#   Markers:
+#     * = executable
+#     / = directory
+#     @ = symlink
+#     | = pipe (FIFO)
+#     = = socket
 filetype_mode=true
 
+
 [Misc]
-# --- LOCALE/TIME (German format) ----------------------------------------------
+# ==============================================================================
+# LOCALE/TIME FORMATS
+# ==============================================================================
+# Regional settings for time display
+
+# timeformat_recent=%d.%b %H:%M
+#   Date format for recent files (< 6 months old)
+#   %d = day (01-31)
+#   %b = month abbreviation (Jan, Feb, ...)
+#   %H = hour 24h (00-23)
+#   %M = minute (00-59)
+#   Example: "16.Feb 14:30"
+#   Why: German date format (day.month time)
 timeformat_recent=%d.%b %H:%M
+
+# timeformat_old=%d.%b %Y
+#   Date format for old files (> 6 months old)
+#   %Y = year (2026)
+#   Example: "16.Feb 2025"
+#   Why: Show year for old files (month/day not enough)
 timeformat_old=%d.%b %Y
+
+# display_codepage=UTF-8
+#   Character encoding for display
+#   UTF-8: Universal encoding (supports all languages)
+#   Why UTF-8: Modern standard (emojis, international chars)
 display_codepage=UTF-8
+
+# source_codepage=UTF-8
+#   Character encoding for file content
+#   UTF-8: Matches display_codepage
+#   Why UTF-8: Consistency (no conversion needed)
 source_codepage=UTF-8
+
 
 [Panelize]
 # ==============================================================================
-# PANELIZE COMMANDS (with timeout protection)
+# PANELIZE COMMANDS (Dynamic File Listings)
 # ==============================================================================
-# Timeout: 5s for most commands (prevents MC freeze on slow filesystems/network)
-# Depth:   Limited find depth to prevent excessive recursion
-# Errors:  Redirected to /dev/null to keep output clean
+# Panelize: Replace panel contents with command output
+# Usage: Left/Right menu → Command → Panelize → Select command
+#
+# Features:
+#   - Timeout protection (5-15s) - prevents MC freeze on slow operations
+#   - Depth limits (-maxdepth) - prevents excessive recursion
+#   - Error suppression (2>/dev/null) - clean output
+#   - Fallback messages (|| echo "⚠") - user feedback on failure
+#
+# Common causes of timeout:
+#   - Network filesystems (NFS, CIFS) - slow I/O
+#   - Large directory trees - excessive recursion
+#   - System commands (docker, zfs) - waiting for API/kernel
+#
+# Timeout values:
+#   - 3-5s: Quick operations (ls, find shallow)
+#   - 8-10s: Medium operations (find deep, git commands)
+#   - 15s: Heavy operations (ZFS, Docker, system scans)
+#
+# Format: Name=command
+#   Name: Shown in menu (use descriptive names)
+#   command: Shell command (output must be file list)
 # ==============================================================================
+
 
 # --- GIT/VERSION CONTROL (5s timeout) -----------------------------------------
+# Git integration - show modified, untracked, staged files
+# Timeout: 5s (git commands usually fast, but may hang on network repos)
+
+# Git Modified=timeout 5s git ls-files --modified --exclude-standard 2>/dev/null || echo "⚠ Timeout or not a git repo"
+#   Show files modified since last commit
+#   git ls-files --modified: Changed files (working tree)
+#   --exclude-standard: Respect .gitignore
+#   Timeout: 5s (git fast locally, may hang on network)
+#   Fallback: Warning message if timeout or not git repo
+#   Usage: See uncommitted changes
 Git Modified=timeout 5s git ls-files --modified --exclude-standard 2>/dev/null || echo "⚠ Timeout or not a git repo"
+
+# Git Untracked=...
+#   Show files not tracked by git (new files)
+#   --others: Show untracked files
+#   --exclude-standard: Respect .gitignore
+#   Usage: Find files to add (git add)
 Git Untracked=timeout 5s git ls-files --others --exclude-standard 2>/dev/null || echo "⚠ Timeout or not a git repo"
+
+# Git Staged=...
+#   Show files staged for commit (git add)
+#   git diff --cached: Staged changes
+#   --name-only: Filenames only (no diff content)
+#   Usage: See what will be committed
 Git Staged=timeout 5s git diff --cached --name-only 2>/dev/null || echo "⚠ Timeout or git error"
+
+# Find .orig (patches)=...
+#   Find patch backup files (*.orig)
+#   Created by: patch, git merge conflicts
+#   -maxdepth 5: Limit recursion (prevent deep scans)
+#   Usage: Clean up after patching
 Find .orig (patches)=timeout 5s find . -maxdepth 5 -name "\\*.orig" -type f -print 2>/dev/null || echo "⚠ Search timeout"
+
+# Find .rej (conflicts)=...
+#   Find rejected patch hunks (*.rej)
+#   Created by: patch when conflicts occur
+#   Usage: Resolve merge conflicts
 Find .rej (conflicts)=timeout 5s find . -maxdepth 5 -name "\\*.rej" -type f -print 2>/dev/null || echo "⚠ Search timeout"
 
+
 # --- SECURITY/PERMISSIONS (10s timeout for recursive search) ------------------
+# Security audit - find SUID, world-writable, executable files
+# Timeout: 10s (security scans may be deep)
+
+# SUID/SGID Files=...
+#   Find files with SUID or SGID bit set (security risk!)
+#   -perm -4000: SUID (run as owner)
+#   -perm -2000: SGID (run as group)
+#   \\( ... \\): Escaped parentheses for find OR condition
+#   -ls: Detailed listing (permissions, owner, size)
+#   Why important: SUID files can escalate privileges
+#   Example: /usr/bin/sudo (SUID root)
+#   -maxdepth 8: Deep scan (but not infinite)
 SUID/SGID Files=timeout 10s find . -maxdepth 8 \\( -perm -4000 -o -perm -2000 \\) -ls 2>/dev/null || echo "⚠ Search timeout (deep scan)"
+
+# World Writable=...
+#   Find files writable by everyone (security risk!)
+#   -perm -002: World-writable (others can modify)
+#   Why dangerous: Any user can overwrite file
+#   Example: Misconfigured web upload directory
 World Writable=timeout 10s find . -maxdepth 8 -type f -perm -002 -ls 2>/dev/null || echo "⚠ Search timeout"
+
+# Executable Scripts=...
+#   Find executable shell/Python scripts
+#   -executable: File has +x bit
+#   \\( -name "*.sh" -o ... \\): Shell or Python scripts
+#   Usage: Audit scripts, check permissions
 Executable Scripts=timeout 10s find . -maxdepth 6 -type f -executable \\( -name "*.sh" -o -name "*.bash" -o -name "*.py" \\) 2>/dev/null || echo "⚠ Search timeout"
 
+
 # --- FILE SIZE/AGE (10s timeout for large scans) ------------------------------
+# Find large, recent, or empty files
+# Timeout: 10s (may scan many files)
+
+# Large Files (>100MB)=...
+#   Find files larger than 100 megabytes
+#   -size +100M: Files > 100MB
+#   -exec ls -lh: Show human-readable size
+#   Usage: Disk space cleanup, find large logs
 Large Files (>100MB)=timeout 10s find . -maxdepth 6 -type f -size +100M -exec ls -lh {} \\; 2>/dev/null || echo "⚠ Search timeout"
+
+# Huge Files (>1GB)=...
+#   Find files larger than 1 gigabyte
+#   -size +1G: Files > 1GB
+#   Usage: Find videos, databases, disk images
 Huge Files (>1GB)=timeout 10s find . -maxdepth 6 -type f -size +1G -exec ls -lh {} \\; 2>/dev/null || echo "⚠ Search timeout"
+
+# Modified Last 24h=...
+#   Find files modified in last 24 hours
+#   -mtime 0: Modified today (0 days ago)
+#   -printf "%TY-%Tm-%Td %TT %p": Date/time and path
+#   sort -r: Reverse sort (newest first)
+#   Usage: See recent changes, audit activity
 Modified Last 24h=timeout 8s find . -maxdepth 6 -type f -mtime 0 -printf "%TY-%Tm-%Td %TT %p\\n" 2>/dev/null | sort -r || echo "⚠ Search timeout"
+
+# Modified Last Week=...
+#   Find files modified in last 7 days
+#   -mtime -7: Modified within 7 days
+#   Usage: Track recent work, review changes
 Modified Last Week=timeout 10s find . -maxdepth 6 -type f -mtime -7 -printf "%TY-%Tm-%Td %TT %p\\n" 2>/dev/null | sort -r || echo "⚠ Search timeout"
+
+# Empty Directories=...
+#   Find empty directories (no files inside)
+#   -type d -empty: Directory with no contents
+#   Usage: Cleanup, remove unused directories
 Empty Directories=timeout 5s find . -maxdepth 6 -type d -empty -print 2>/dev/null || echo "⚠ Search timeout"
 
+
 # --- PROXMOX (VMs/CTs/ZFS) - 10s timeout for system commands ------------------
+# Proxmox VE integration - list VMs, containers, configs
+# Timeout: 10s (system commands may wait for locks)
+
+# Proxmox VMs=...
+#   List QEMU/KVM virtual machines
+#   command -v qm: Check if qm command exists
+#   timeout 10s qm list: List VMs (may hang on cluster)
+#   awk 'NR>1{print $1" "$NF}': Extract VMID and Name (skip header)
+#   Usage: Quick VM inventory
 Proxmox VMs=command -v qm >/dev/null && timeout 10s qm list 2>/dev/null | awk 'NR>1{print $1" "$NF}' || echo "⚠ qm not found or timeout"
+
+# Proxmox CTs=...
+#   List LXC containers
+#   pct list: List containers
+#   Usage: Container inventory
 Proxmox CTs=command -v pct >/dev/null && timeout 10s pct list 2>/dev/null | awk 'NR>1{print $1" "$NF}' || echo "⚠ pct not found or timeout"
+
+# Proxmox Configs=...
+#   Find VM/CT configuration files
+#   /etc/pve: Proxmox config directory (cluster filesystem)
+#   -name "*.conf": VM/CT configs
+#   head -50: Limit output (many VMs may exist)
+#   Usage: Browse configs, backup configurations
 Proxmox Configs=timeout 5s find /etc/pve -maxdepth 3 -name "*.conf" -type f 2>/dev/null | head -50 || echo "⚠ Search timeout"
+
+# ZFS Datasets=...
+#   List ZFS filesystems
+#   zfs list: Show all datasets
+#   -Ho name,mountpoint,used,avail: No header, specific columns
+#   Usage: ZFS space overview
 ZFS Datasets=command -v zfs >/dev/null && timeout 10s zfs list -Ho name,mountpoint,used,avail 2>/dev/null || echo "⚠ ZFS not available or timeout"
+
+# ZFS Snapshots=...
+#   List ZFS snapshots
+#   -t snapshot: Snapshot type only
+#   -Ho name,used,creation: Name, space, date
+#   head -50: Limit (may have hundreds of snapshots)
+#   Timeout: 15s (snapshot list can be slow)
+#   Usage: Snapshot management, space audit
 ZFS Snapshots=command -v zfs >/dev/null && timeout 15s zfs list -t snapshot -Ho name,used,creation 2>/dev/null | head -50 || echo "⚠ ZFS timeout (many snapshots?)"
+
+# pvetm Status=...
+#   Show Proxmox task manager status
+#   pvetm status: Current tasks (backups, migrations, etc.)
+#   --plain: Plain text output (no formatting)
+#   Usage: Monitor running tasks
 pvetm Status=command -v pvetm >/dev/null && timeout 5s pvetm status --plain 2>/dev/null || echo "⚠ pvetm not found or timeout"
 
+
 # --- CONTAINERS (Docker/Podman) - 10s timeout for API calls -------------------
+# Docker/Podman integration - list images, containers
+# Timeout: 10s (Docker API may be slow)
+
+# Docker Images=...
+#   List Docker images
+#   docker images --format: Custom format
+#   {{.Repository}}:{{.Tag}}: Image name with tag
+#   {{.Size}}: Image size
+#   Usage: Image inventory, cleanup
 Docker Images=command -v docker >/dev/null && timeout 10s docker images --format "{{.Repository}}:{{.Tag}} ({{.Size}})" 2>/dev/null || echo "⚠ Docker not installed or timeout"
+
+# Docker Containers=...
+#   List all containers (running + stopped)
+#   docker ps -a: All containers
+#   --format "table ...": Tabular output
+#   Usage: Container management
 Docker Containers=command -v docker >/dev/null && timeout 10s docker ps -a --format "table {{.ID}}\\t{{.Names}}\\t{{.Status}}" 2>/dev/null || echo "⚠ Docker timeout"
+
+# Docker Running=...
+#   List only running containers
+#   docker ps: Running containers only
+#   Usage: Quick status check
 Docker Running=command -v docker >/dev/null && timeout 8s docker ps --format "{{.Names}} ({{.Status}})" 2>/dev/null || echo "⚠ Docker timeout"
+
+# Podman Containers=...
+#   List Podman containers (Docker alternative)
+#   podman ps -a: All containers
+#   Usage: Podman users (RHEL, Fedora)
 Podman Containers=command -v podman >/dev/null && timeout 10s podman ps -a --format "table {{.ID}}\\t{{.Names}}\\t{{.Status}}" 2>/dev/null || echo "⚠ Podman not installed or timeout"
 
+
 # --- DEVELOPMENT/CODE (8s timeout for deep searches) --------------------------
+# Find source code files by language
+# Timeout: 8s (may scan large codebases)
+
+# Shell Scripts=...
+#   Find bash/shell scripts
+#   -name "*.sh" -o -name "*.bash": Shell extensions
+#   -printf "%TY-%Tm-%Td %TT %p": Date and path
+#   sort -r: Newest first
+#   Usage: Code audit, script inventory
 Shell Scripts=timeout 8s find . -maxdepth 6 \\( -name "*.sh" -o -name "*.bash" \\) -type f -printf "%TY-%Tm-%Td %TT %p\\n" 2>/dev/null | sort -r || echo "⚠ Search timeout"
+
+# Python Files=...
+#   Find Python scripts
+#   -name "*.py": Python extension
+#   Usage: Python project navigation
 Python Files=timeout 8s find . -maxdepth 6 -name "*.py" -type f -printf "%TY-%Tm-%Td %TT %p\\n" 2>/dev/null | sort -r || echo "⚠ Search timeout"
+
+# JavaScript Files=...
+#   Find JavaScript/TypeScript files
+#   \\( -name "*.js" -o -name "*.ts" -o ... \\): JS/TS extensions
+#   Usage: Frontend project navigation
 JavaScript Files=timeout 8s find . -maxdepth 6 \\( -name "*.js" -o -name "*.ts" -o -name "*.jsx" -o -name "*.tsx" \\) -type f 2>/dev/null || echo "⚠ Search timeout"
+
+# Dotfiles (Home)=...
+#   Find dotfiles in home directory
+#   "$HOME": User home (not current directory)
+#   -name ".*": Hidden files (starting with dot)
+#   -not -path "*/.git/*": Exclude git internals
+#   -not -path "*/.cache/*": Exclude cache
+#   Usage: Dotfiles management, backup
 Dotfiles (Home)=timeout 5s find "$HOME" -maxdepth 3 -name ".*" -type f -not -path "*/.git/*" -not -path "*/.cache/*" 2>/dev/null | sort || echo "⚠ Search timeout"
+
+# Config Files=...
+#   Find system configuration files
+#   /etc: System configs directory
+#   \\( -name "*.conf" -o -name "*.cfg" -o -name "*.ini" \\): Config extensions
+#   head -50: Limit (many configs exist)
+#   Usage: System administration
 Config Files=timeout 5s find /etc -maxdepth 3 \\( -name "*.conf" -o -name "*.cfg" -o -name "*.ini" \\) -type f 2>/dev/null | head -50 || echo "⚠ Search timeout"
 
+
 # --- WEB/FRONTEND (5s timeout) ------------------------------------------------
+# Find web development files
+# Timeout: 5s (usually shallow directory structures)
+
+# HTML/CSS/JS=...
+#   Find web frontend files
+#   \\( -name "*.html" -o -name "*.css" -o -name "*.scss" \\): Web extensions
+#   Usage: Frontend project navigation
 HTML/CSS/JS=timeout 5s find . -maxdepth 6 \\( -name "*.html" -o -name "*.css" -o -name "*.scss" \\) -type f 2>/dev/null || echo "⚠ Search timeout"
+
+# Markdown Docs=...
+#   Find Markdown documentation
+#   \\( -name "*.md" -o -name "*.mdx" \\): Markdown extensions
+#   Usage: Documentation navigation
 Markdown Docs=timeout 5s find . -maxdepth 6 \\( -name "*.md" -o -name "*.mdx" \\) -type f 2>/dev/null || echo "⚠ Search timeout"
 
+
 # --- LOGS/TROUBLESHOOTING (8s timeout for /var/log access) --------------------
+# Find system logs for troubleshooting
+# Timeout: 8s (/var/log may be large, slow)
+
+# System Logs (Recent)=...
+#   Find recent log files (last 24h)
+#   /var/log: System log directory
+#   -mtime -1: Modified in last day
+#   -readable: User can read (permission check)
+#   -printf "%TY-%Tm-%Td %TT %p": Date and path
+#   sort -r: Newest first
+#   head -50: Limit output
+#   Usage: Troubleshooting, audit recent activity
 System Logs (Recent)=timeout 8s find /var/log -maxdepth 3 -type f -mtime -1 -readable -printf "%TY-%Tm-%Td %TT %p\\n" 2>/dev/null | sort -r | head -50 || echo "⚠ Search timeout"
+
+# Error Logs=...
+#   Find logs with "error" or "fail" in filename
+#   \\( -name "*error*" -o -name "*fail*" \\): Error log patterns
+#   Usage: Quick error diagnosis
 Error Logs=timeout 5s find /var/log -maxdepth 3 \\( -name "*error*" -o -name "*fail*" \\) 2>/dev/null | head -30 || echo "⚠ Search timeout"
+
+# Pi-hole Logs=...
+#   Find Pi-hole DNS logs (if Pi-hole installed)
+#   -name "*pihole*": Pi-hole log files
+#   Timeout: 3s (quick check)
+#   Usage: Pi-hole administration
 Pi-hole Logs=timeout 3s find /var/log -maxdepth 2 -name "*pihole*" -type f 2>/dev/null || echo "⚠ Search timeout or Pi-hole not installed"
 
+
 # --- DNS/NETWORK (3s timeout - quick system check) ----------------------------
+# Find DNS configuration files
+# Timeout: 3s (few files, fast)
+
+# DNS Configs=...
+#   Find DNS resolver configs
+#   /etc: System config directory
+#   unbound.conf*, dnsmasq.conf*, resolv.conf*: DNS configs
+#   Usage: DNS troubleshooting
 DNS Configs=timeout 3s find /etc -maxdepth 2 \\( -name "unbound.conf*" -o -name "dnsmasq.conf*" -o -name "resolv.conf*" \\) 2>/dev/null || echo "⚠ Search timeout"
 
+
 # --- PACKAGE FILES (8s timeout) -----------------------------------------------
+# Find package and archive files
+# Timeout: 8s (scanning for packages)
+
+# Debian Packages=...
+#   Find .deb package files
+#   -name "*.deb": Debian packages
+#   -exec ls -lh: Show size
+#   Usage: Package management, cleanup
 Debian Packages=timeout 8s find . -maxdepth 5 -name "*.deb" -type f -exec ls -lh {} \\; 2>/dev/null || echo "⚠ Search timeout"
+
+# Archives (tar/zip)=...
+#   Find compressed archives
+#   \\( -name "*.tar.gz" -o -name "*.zip" -o -name "*.7z" \\): Archive formats
+#   Usage: Backup management, cleanup
 Archives (tar/zip)=timeout 8s find . -maxdepth 5 \\( -name "*.tar.gz" -o -name "*.zip" -o -name "*.7z" \\) -type f 2>/dev/null || echo "⚠ Search timeout"
 
+
 [Colors]
-# --- COLOR THEME (gotar dark skin) --------------------------------------------
+# ==============================================================================
+# COLOR THEME (gotar dark skin)
+# ==============================================================================
+# Custom color overrides for specific file types
+# Note: Most colors defined in skin file (/usr/share/mc/skins/gotar.ini)
+# These override specific categories
+
+# directory=brightcyan
+#   Directories shown in bright cyan
+#   Why cyan: Convention (distinguishes from files)
+#   gotar theme: Already uses cyan, this ensures consistency
 directory=brightcyan
+
+# executable=brightgreen
+#   Executable files shown in bright green
+#   Why green: "Go" color (can be executed)
+#   Matches: -rwxr-xr-x permission
 executable=brightgreen
+
+# selected=bold,brightwhite
+#   Selected files shown in bold bright white
+#   Why bold: Stand out from normal files
+#   Selection: Insert, Ctrl+T, mouse drag
 selected=bold,brightwhite
+
+# markselect=underline,brightmagenta
+#   Marked files shown underlined in bright magenta
+#   Why magenta: Different from selected (dual state)
+#   Mark: Insert key (tag files for operations)
 markselect=underline,brightmagenta
+
+# errors=brightred
+#   Error messages shown in bright red
+#   Why red: Alert color (urgent attention)
+#   Example: "Cannot delete file: Permission denied"
 errors=brightred
+
+# status=brightwhite,blue
+#   Status bar background and text
+#   brightwhite: Text color (readable)
+#   blue: Background (professional, calming)
+#   Location: Bottom bar with file info
 status=brightwhite,blue
+
+# menu=brightwhite,blue
+#   Menu bar colors
+#   Matches status bar (consistency)
+#   Location: Top bar (File, Edit, Command, etc.)
 menu=brightwhite,blue
+
+# menuhot=brightcyan,blue
+#   Menu hotkeys (underlined letters)
+#   brightcyan: Stands out from menu text
+#   blue: Same background as menu
+#   Example: "File" (F underlined)
 menuhot=brightcyan,blue
+
+# dialog=brightwhite,blue
+#   Dialog box colors
+#   Matches menu/status (consistent theme)
+#   Example: Delete confirmation dialog
 dialog=brightwhite,blue
+
+# input=brightwhite,blue
+#   Input field colors
+#   Matches dialog (consistent)
+#   Example: Filename input in copy dialog
 input=brightwhite,blue
+
+# gauge=brightblack,brightcyan
+#   Progress bar colors
+#   brightblack: Dark background (empty portion)
+#   brightcyan: Bright foreground (filled portion)
+#   Example: File copy progress
 gauge=brightblack,brightcyan

@@ -6,21 +6,176 @@
 # CHANGES:     v3.6.7 - Remove Python/JS/LaTeX (not in framework scope)
 # ------------------------------------------------------------------------------
 
+# ==============================================================================
+# GITATTRIBUTES PURPOSE
+# ==============================================================================
+# Controls Git's handling of files across platforms (Windows/Linux/macOS)
+#
+# PROBLEMS THIS SOLVES:
+#   1. Line Ending Chaos (CRLF vs LF)
+#      - Windows: CRLF (\r\n) = Carriage Return + Line Feed
+#      - Unix/Linux/macOS: LF (\n) = Line Feed only
+#      - Mixed line endings → Scripts break, diffs unreadable, merges fail
+#
+#   2. Binary File Corruption
+#      - Text conversion on binary files → Data corruption
+#      - Example: Git converts CRLF→LF in PNG → Corrupted image
+#
+#   3. Noisy Diffs
+#      - Binary files shown as text → Thousands of garbage lines
+#      - Lockfiles with 10,000 lines → Unusable diff output
+#
+# GITATTRIBUTES SYNTAX:
+#   pattern  attribute=value
+#   *.sh     text eol=lf
+#   *.png    binary
+#
+# ATTRIBUTES EXPLAINED:
+#   text=auto
+#     - Git auto-detects text files (checks for null bytes, binary markers)
+#     - Text files: Normalized to LF in repository
+#     - Binary files: Stored unchanged
+#     - Smart detection (99% accurate)
+#
+#   text eol=lf
+#     - Force LF (Unix) line endings
+#     - Repository: LF
+#     - Working tree (checkout): LF
+#     - Overrides core.autocrlf (Windows Git default)
+#     - Use for: Shell scripts, Makefiles (MUST be LF)
+#
+#   text eol=crlf
+#     - Force CRLF (Windows) line endings
+#     - Repository: LF (normalized)
+#     - Working tree (checkout): CRLF
+#     - Use for: .bat, .cmd, .ps1 (Windows scripts)
+#
+#   binary
+#     - No line ending conversion (stored as-is)
+#     - No text diff (prevents garbage output)
+#     - Manual merge required (Git can't auto-merge)
+#     - Use for: Images, archives, compiled files
+#
+# EXAMPLE FLOW (Windows → Linux):
+#   1. Developer on Windows: script.sh with CRLF
+#   2. git add script.sh → Git converts CRLF → LF (in repo)
+#   3. Developer on Linux: git pull → Checkout as LF
+#   4. ./script.sh → Works! (LF required for shebang)
+#
+# WHY THIS MATTERS FOR BASH:
+#   #!/bin/bash\r\n  ← CRLF (Windows)
+#   ^-- Bash reads as: #!/bin/bash\r (invalid interpreter!)
+#   Error: /usr/bin/env: 'bash\r': No such file or directory
+#
+#   #!/bin/bash\n  ← LF (Unix)
+#   ^-- Bash reads as: #!/bin/bash (correct!)
+#   Works on all platforms!
+#
+# TESTING:
+#   # Check file line endings:
+#   file script.sh
+#   # ASCII text → LF
+#   # ASCII text, with CRLF line terminators → CRLF
+#
+#   # Check Git's attribute for file:
+#   git check-attr -a script.sh
+#   # script.sh: text: set
+#   # script.sh: eol: lf
+#
+#   # View actual bytes:
+#   od -c script.sh | head
+#   # Shows: \n (LF) or \r\n (CRLF)
+#
+# DOCUMENTATION:
+#   man gitattributes
+#   https://git-scm.com/docs/gitattributes
+# ==============================================================================
+
+
 # --- GLOBAL AUTO DETECT + LF DEFAULT ------------------------------------------
+# DEFAULT RULE: Applies to ALL files not explicitly mentioned below
+# This is the foundation - specific rules override this
+
+# Why text=auto eol=lf as default?
+#   1. text=auto: Git detects text vs binary (prevents binary corruption)
+#   2. eol=lf: Working tree uses LF (Unix standard, works everywhere)
+#   3. Overrides core.autocrlf=true (Windows Git default that converts to CRLF)
+#   4. Shell scripts REQUIRE LF (shebang breaks with CRLF)
+#   5. Safe: Binary files detected automatically (not converted)
+#
+# Without this: Windows users may checkout with CRLF → Scripts fail on Linux
+# With this: All users get LF → Scripts work everywhere
+
+# Pattern: * (asterisk = all files)
+# text=auto: Auto-detect text files, normalize to LF in repo
+# eol=lf: Force LF in working tree (checkout)
 * text=auto eol=lf
 
+
 # --- SHELL/DOTFILES FRAMEWORK (EXECUTABLE + LF) -------------------------------
-# Executable scripts (shebang present)
+# Shell scripts and bash configuration files
+# CRITICAL: MUST use LF (not CRLF)
+#
+# WHY LF MANDATORY:
+#   1. Shebang line (#!) requires LF
+#      #!/bin/bash\r\n → Bash interprets as #!/bin/bash\r (invalid path)
+#      Error: /usr/bin/env: 'bash\r': No such file or directory
+#
+#   2. Bash interprets CRLF as part of command
+#      echo "test"\r\n → Bash sees: echo "test"\r (syntax error)
+#      Error: $'\r': command not found
+#
+#   3. Sourcing with CRLF breaks variable assignments
+#      VAR="value"\r\n → Bash stores: VAR="value\r" (CR in value!)
+#      Later: if [[ "$VAR" == "value" ]] → FALSE (doesn't match)
+#
+#   4. Here-documents fail
+#      cat <<EOF\r\n → Bash looks for "EOF\r" (never finds it!)
+#      Result: Infinite read (waits for EOF that never comes)
+#
+# SYMPTOMS OF CRLF IN SHELL SCRIPTS:
+#   - Script exists but "not found" error
+#   - Variables have unexpected values
+#   - Conditionals always false
+#   - Here-docs never close
+#   - Syntax errors on valid code
+
+# Executable scripts (shebang present, chmod +x)
+# Pattern: *.sh matches all shell scripts
+# text: Treat as text (enable line ending normalization)
+# eol=lf: Force LF in repository AND working tree
 *.sh                  text eol=lf
+
+# Framework core scripts (main entry points)
+# Explicit patterns ensure these are NEVER treated as binary
+# Even if Git's auto-detection fails (rare edge case)
+# These are the heart of the framework - must always be LF
 dotfilesctl.sh        text eol=lf
 core.sh               text eol=lf
 collect-review.sh     text eol=lf
+
+# Library and utility scripts (subdirectories)
+# Pattern: lib/*.sh matches lib/logging.sh, lib/validators.sh, etc.
+# scripts/*.sh matches scripts/backup.sh, scripts/deploy.sh
 lib/*.sh              text eol=lf
 scripts/*.sh          text eol=lf
 
-# Sourced bash files (no shebang, no exec needed)
+# Sourced bash files (no shebang, not executable)
+# These files are loaded via 'source' or '.' command, not executed directly
+# Still require LF to avoid bash parsing errors
+# Extension: .bash is convention for sourced libraries (not executable scripts)
 *.bash                text eol=lf
+
+# Dotfiles (sourced by bash during login/interactive shell)
+# Pattern: .bash* matches .bashrc, .bash_profile, .bash_aliases, .bash_logout
+# Critical: Mixed line endings break shell initialization
+# Symptom: Login shell fails, variables not set, aliases missing
 .bash*                text eol=lf
+
+# Explicit dotfile patterns (for clarity and precedence)
+# Ensures these specific files always get LF treatment
+# More specific patterns override wildcards (.bash* above)
+# Explicit listing: Self-documenting (shows which files exist)
 .bashrc               text eol=lf
 .bashenv              text eol=lf
 .bashprompt           text eol=lf
@@ -30,126 +185,568 @@ scripts/*.sh          text eol=lf
 .bash_profile         text eol=lf
 .bash_logout          text eol=lf
 
-# Other dotfiles
+# Other dotfiles (terminal and editor configuration)
+# .dircolors: LS_COLORS definition (sourced by bash via eval "$(dircolors)")
+# .nanorc: Nano editor configuration (parsed by nano on startup)
+# .editorconfig: Editor settings (read by IDEs: VS Code, IntelliJ, Sublime)
+# .shellcheckrc: ShellCheck linter configuration (read by shellcheck)
 .dircolors            text eol=lf
 .nanorc               text eol=lf
 .editorconfig         text eol=lf
 .shellcheckrc         text eol=lf
 
+
 # --- CONFIGURATION (LF) -------------------------------------------------------
+# Configuration files in various formats
+# Standard: LF line endings (Unix convention)
+# Rationale: Most config parsers accept LF, some reject CRLF
+# Windows parsers: Usually accept LF (more forgiving than Unix parsers)
+# Unix parsers: Often REJECT CRLF (stricter)
+# Conclusion: LF works everywhere, CRLF doesn't
+
+# JSON/JSONC (JSON with comments)
+# Used by: VS Code settings, package.json, tsconfig.json
+# JSONC: JSON + comments (// and /* */) - VS Code extension
+# Standard: LF (JSON spec doesn't mandate, but LF is convention)
 *.json                text eol=lf
 *.jsonc               text eol=lf
+
+# YAML (indentation-sensitive, whitespace matters!)
+# Used by: GitHub Actions, Docker Compose, Ansible, Kubernetes
+# YAML parser: Most accept LF, some reject CRLF (depends on implementation)
+# Indentation: YAML uses spaces (not tabs) - whitespace is syntax
+# CRLF risk: May break YAML parsers (especially Python-based)
 *.yaml                text eol=lf
 *.yml                 text eol=lf
+
+# TOML (Tom's Obvious, Minimal Language)
+# Used by: Cargo.toml (Rust), pyproject.toml (Python), Netlify config
+# Standard: LF (TOML spec recommends LF)
 *.toml                text eol=lf
+
+# Classic config formats
+# .conf: Apache, Nginx, systemd, OpenVPN, ProFTPD
+# .cfg: Python configparser, general configs
+# .ini: Windows-style config (but LF works fine on Windows)
+# Standard: LF (Unix convention, Windows parsers accept LF)
 *.conf                text eol=lf
 *.cfg                 text eol=lf
 *.ini                 text eol=lf
+
+# Git meta files (repository configuration)
+# Must use LF (Git internally uses LF)
+# .gitignore: Ignore patterns (one per line, parsed by Git)
+# .gitattributes: This file! (parsed by Git)
+# Git parser: Expects LF (CRLF may cause issues)
 .gitignore            text eol=lf
 .gitattributes        text eol=lf
+
+# Markdown linter config
+# Pattern: .markdownlint.jsonc, .markdownlint-cli2.jsonc
+# Wildcard: *.markdownlint* matches all variants
+# Format: JSONC (JSON with comments)
 *.markdownlint*       text eol=lf
 
-# VS Code
+# VS Code workspace settings
+# Pattern: .vscode/settings.json, .vscode/tasks.json, .vscode/launch.json
+# Wildcard: .vscode/*.json matches all JSON files in .vscode directory
+# Format: JSON (VS Code configuration)
 .vscode/*.json        text eol=lf
+
+# Micro editor keybindings (JSON format)
+# Used by: Micro text editor (~/.config/micro/bindings.json)
 bindings.json         text eol=lf
+
+# Generic settings file (various tools use this name)
+# Pattern: settings.json (no path = matches anywhere)
+# Used by: VS Code, various IDEs, custom tools
 settings.json         text eol=lf
 
+
 # --- DOCUMENTATION (LF) -------------------------------------------------------
+# Documentation and text files
+# Standard: LF (universal compatibility)
+# Markdown: GitHub, GitLab, Bitbucket all render with LF
+# Plain text: LF is universal (Windows Notepad now supports LF since 2018!)
+
+# Markdown (GitHub-flavored, CommonMark, MDX)
+# Used by: README.md, CHANGELOG.md, docs/, wiki
+# GitHub: Expects LF (CRLF may cause rendering issues)
+# .md: Standard Markdown
+# .mdx: Markdown with JSX (React documentation)
 *.md                  text eol=lf
 *.mdx                 text eol=lf
+
+# Plain text files
+# Used by: Notes, logs, data files
+# .txt: Universal text format
+# Standard: LF (works everywhere, even Windows Notepad since Windows 10 1809)
 *.txt                 text eol=lf
+
+# reStructuredText (Python documentation standard)
+# Used by: Python projects, Sphinx documentation
+# .rst: reStructuredText format
+# Standard: LF (Python convention)
 *.rst                 text eol=lf
+
+# Org-mode (Emacs documentation format)
+# Used by: Emacs users, academic writing, project planning
+# .org: Org-mode format
+# Standard: LF (Emacs convention)
 *.org                 text eol=lf
+
+# Project meta files (no extension, uppercase convention)
+# LICENSE: MIT, GPL, Apache, BSD, etc.
+# README*: README, README.md, README.txt, README.rst
+# CHANGELOG*: CHANGELOG.md, CHANGELOG.txt, CHANGELOG.rst
+# STYLEGUIDE*: STYLEGUIDE.md, STYLEGUIDE.txt
+# Wildcard: * matches files starting with name (with or without extension)
+# Standard: LF (universal convention for project docs)
 LICENSE               text eol=lf
 README*               text eol=lf
 CHANGELOG*            text eol=lf
 STYLEGUIDE*           text eol=lf
 
-# Project dictionary
+# Project custom dictionary (VS Code spell checker)
+# Used by: Code Spell Checker extension (streetsidesoftware.code-spell-checker)
+# Contains: Project-specific words (shellcheck, proxmox, dotfiles, zpool)
+# Format: One word per line (LF required)
+# Without LF: Words may not be recognized (CRLF breaks line parsing)
 project-words.txt     text eol=lf
 
+
 # --- PROXMOX/MC/ZFS (CONFIG + DATA) -------------------------------------------
+# Proxmox VE and system-specific files
+# Mixed handling: Config files (text), data files (binary)
+
+# Proxmox configuration files
+# .pve: Proxmox VE config format (text-based key=value)
+# Used by: Proxmox VE cluster configuration
+# Standard: LF (parsed by Proxmox perl scripts)
 *.pve                 text eol=lf
+
+# Midnight Commander configuration
+# mc/ini: MC settings file (INI format)
+# Path: ~/.config/mc/ini
+# Format: INI-style (key=value under [Sections])
+# Standard: LF (parsed by MC C code)
 mc/ini                text eol=lf
+
+# Configuration directories (modular configs)
+# Pattern: *.conf.d matches directories like /etc/nginx/conf.d/
+# Used by: Nginx, Apache, systemd (include directives)
+# Standard: LF (Unix services expect LF)
 *.conf.d              text eol=lf
+
+# ZFS metadata files (binary, don't touch!)
+# .zfs: ZFS filesystem metadata (binary format)
+# .pool: ZFS pool cache (binary format)
+# CRITICAL: Line ending conversion would CORRUPT data
+# binary: Ensures no transformation (stored as-is)
+# Symptoms if converted: ZFS import fails, data loss, pool corruption
 *.zfs                 binary
 *.pool                binary
 
+
 # --- WINDOWS FILES (CRLF) -----------------------------------------------------
+# Windows-specific scripts that REQUIRE CRLF
+# Rationale: cmd.exe and PowerShell expect CRLF (Windows convention)
+# Without CRLF: May work, but not guaranteed (platform-specific bugs)
+
+# Batch files (DOS/Windows command scripts)
+# .bat: Batch file (DOS era, cmd.exe)
+# .cmd: Command file (Windows NT+, cmd.exe)
+# cmd.exe: Expects CRLF (may work with LF but not guaranteed)
+# Historical: DOS used CRLF, Windows maintains compatibility
+# eol=crlf: Repository stores LF, checkout converts to CRLF (Windows users)
 *.bat                 text eol=crlf
 *.cmd                 text eol=crlf
+
+# PowerShell scripts
+# .ps1: PowerShell script (Windows automation)
+# PowerShell: Accepts LF OR CRLF (flexible parser)
+# Convention: CRLF (Windows standard)
+# eol=crlf: Ensures Windows users get correct line endings
+# Linux users: Can run with PowerShell Core (accepts LF)
 *.ps1                 text eol=crlf
 
+
 # --- MAKEFILES (LF) -----------------------------------------------------------
+# GNU Make and build system files
+# CRITICAL: Make is VERY sensitive to whitespace
+# MUST use LF: Make uses LF as line terminator
+# MUST use TABS: Recipe lines MUST start with tab (not spaces)
+#
+# CRLF BREAKS MAKEFILES:
+#   1. Tab detection fails
+#      - Make detects recipe by: LF + TAB
+#      - With CRLF: CR + LF + TAB (CR interferes!)
+#      - Error: Makefile:5: *** missing separator. Stop.
+#
+#   2. Continuation fails
+#      - Make uses backslash-newline for continuation: \<LF>
+#      - With CRLF: \<CR><LF> (doesn't match \<LF>)
+#      - Result: Continuation ignored, syntax error
+#
+#   3. Variable expansion fails
+#      - Make reads until LF
+#      - With CRLF: Reads until CR (then LF left over)
+#      - Result: Variables include CR character
+#
+# TESTING MAKEFILE LINE ENDINGS:
+#   file Makefile
+#   # Should show: ASCII text (not "with CRLF")
+#
+#   # Check for tabs:
+#   cat -A Makefile
+#   # Recipe lines should show: ^I (tab) at start
+#   # Line ends should show: $ (LF only, not ^M$ which is CRLF)
+
+# Standard Makefile name (GNU Make convention)
 Makefile              text eol=lf
+
+# Lowercase variant (some projects use lowercase)
 makefile              text eol=lf
+
+# Include files (rules.mk, variables.mk)
+# .mk: Make include files (sourced by Makefile)
 *.mk                  text eol=lf
+
+# Alternative extension (less common)
 *.mak                 text eol=lf
+
+# GNU Make specific (overrides 'Makefile' if both exist)
 GNUmakefile           text eol=lf
 
+
 # --- GIT CONFIG FILES (LF) ----------------------------------------------------
+# Git internal configuration files
+# Must use LF (Git's internal format)
+
+# User/repo git config
+# .gitconfig: User-level Git settings (~/.gitconfig or .git/config)
+# Format: INI-style ([section] key = value)
+# Git parser: Expects LF (CRLF may cause issues)
 .gitconfig            text eol=lf
+
+# Git submodules definition
+# .gitmodules: Submodule URLs and paths
+# Format: INI-style ([submodule "name"] path = ...)
+# Git parser: Expects LF
 .gitmodules           text eol=lf
 
+
 # --- BINARY/MEDIA (NO TRANSFORM) ----------------------------------------------
-# Images
+# Files that should NEVER have line ending conversion
+# binary attribute:
+#   - No line ending conversion (stored as-is)
+#   - No text diff (prevents garbage output)
+#   - Manual merge required (Git can't auto-merge)
+#
+# WHY BINARY?
+#   1. Line ending conversion would CORRUPT data
+#      - PNG file: Contains bytes 0x0A (LF) as part of image data
+#      - Git converts 0x0A → 0x0D 0x0A (CRLF) → Corrupted PNG!
+#      - Result: Image won't open, "file is corrupted" error
+#
+#   2. Text diff is meaningless (binary data)
+#      - PNG diff shows hex garbage: "±ä°å½ä¸ª±"
+#      - No useful information (can't see what changed)
+#      - Bloats diff output (thousands of lines)
+#
+#   3. Merge conflicts unsolvable
+#      - Git can't auto-merge binary files (no line-by-line comparison)
+#      - Manual choice: Keep ours, keep theirs, or manual merge tool
+#
+# EXAMPLE CORRUPTION:
+#   # PNG file contains byte sequence: ... 0A 3D 2F ...
+#   # Git with autocrlf=true converts: ... 0D 0A 3D 2F ...
+#   # Result: Invalid PNG (file command shows "data", not "PNG image")
+
+# Images (raster formats - pixel data, compressed)
+# All image formats are binary (no text content)
+# PNG: Portable Network Graphics (lossless, transparent)
 *.png                 binary
+
+# JPEG: Joint Photographic Experts Group (lossy, photos)
 *.jpg                 binary
 *.jpeg                binary
+
+# GIF: Graphics Interchange Format (lossless, animated)
 *.gif                 binary
+
+# WebP: Modern web format (smaller than PNG/JPEG)
 *.webp                binary
+
+# ICO: Icons (Windows favicons, app icons)
 *.ico                 binary
+
+# SVG: Scalable Vector Graphics (XML, but often minified)
+# Note: SVG is technically text (XML), but:
+#   - Often minified (no line breaks)
+#   - Contains binary data (base64 embedded images)
+#   - Diff not useful (single-line XML)
+# binary: Prevents useless diffs
 *.svg                 binary
+
+# AVIF: AV1 Image File Format (modern, better compression than WebP)
 *.avif                binary
 
-# Documents
+# Documents (portable formats)
+# PDF: Portable Document Format (binary PostScript)
+# Contains: Compressed text, images, fonts
+# binary: PDF has internal line ending handling (CRLF in text streams)
 *.pdf                 binary
 
-# Archives
+# Archives (compressed containers)
+# All compression formats are binary (data stream, not text)
+# Line ending conversion would corrupt archive!
+
+# ZIP: ZIP archive (DEFLATE compression)
 *.zip                 binary
+
+# 7z: 7-Zip archive (LZMA compression, best ratio)
 *.7z                  binary
+
+# Gzip: GNU zip (DEFLATE compression, single file)
 *.gz                  binary
+
+# Tarball variants (tar + compression)
+# .tgz: Alias for .tar.gz (tape archive + gzip)
 *.tgz                 binary
+
+# .tar.gz: Explicit tar.gz (most common)
 *.tar.gz              binary
+
+# .tar.xz: tar + xz compression (best ratio, slower)
 *.tar.xz              binary
+
+# .tar.bz2: tar + bzip2 compression (good ratio)
 *.tar.bz2             binary
+
+# .tar.zst: tar + zstd compression (fast, good ratio)
 *.tar.zst             binary
+
+# LZ4: LZ4 compression (extremely fast, lower ratio)
 *.lz4                 binary
+
+# RAR: RAR archive (proprietary, good compression)
 *.rar                 binary
+
+# XZ: XZ compression (LZMA2, single file)
 *.xz                  binary
+
+# Bzip2: Bzip2 compression (single file)
 *.bz2                 binary
+
+# Zstd: Zstandard compression (Facebook, modern)
 *.zst                 binary
 
-# Packages
+# Packages (system packages and installers)
+# Distribution-specific binary formats
+
+# DEB: Debian package (ar archive + tar.gz + control files)
 *.deb                 binary
+
+# RPM: RedHat Package Manager (cpio archive + header)
 *.rpm                 binary
+
+# AppImage: Universal Linux binary (squashfs filesystem + ELF)
 *.AppImage            binary
+
+# Snap: Snap package (squashfs filesystem)
 *.snap                binary
+
+# ISO: Disk image (bootable CD/DVD, ISO 9660 filesystem)
 *.iso                 binary
+
+# IMG: Raw disk image (byte-for-byte disk copy)
 *.img                 binary
+
+# QCOW2: QEMU/KVM virtual disk (copy-on-write, compressed)
 *.qcow2               binary
 
+
 # --- LOCKFILES (BINARY = NO DIFF) ---------------------------------------------
+# Dependency lock files (auto-generated, frequently changing)
+# WHY BINARY?
+#   1. Large files (thousands of lines, hundreds of KB)
+#      - package-lock.json: Often 10,000+ lines
+#      - Cargo.lock: Contains checksums for every dependency
+#
+#   2. Machine-generated (not human-readable)
+#      - Format: JSON or TOML (technically text)
+#      - Content: SHA hashes, URLs, version numbers
+#      - No meaningful line-by-line review (too much data)
+#
+#   3. Text diff is noisy and unhelpful
+#      - Every dependency update: Hundreds of lines change
+#      - Diff shows: Hash changes (meaningless to humans)
+#      - No insight: Can't tell what actually changed
+#
+#   4. Binary treatment improves workflow
+#      - Git shows: "Binary files differ" (one line, clean)
+#      - Instead of: 500 lines of hash diffs
+#      - Saves time: Faster diffs, smaller logs
+#
+#   5. Still tracked (important!)
+#      - binary ≠ ignored (.gitignore)
+#      - Lockfiles ARE tracked (reproducible builds)
+#      - Benefit: Clean diffs, but still versioned
+#
+#   6. Manual review uses dedicated tools
+#      - npm: npm diff (compares versions, not hashes)
+#      - Cargo: cargo tree --diff (shows dependency changes)
+#      - Poetry: poetry show --outdated
+#      - Better: Use package manager tools, not Git diff
+#
+# EXAMPLE DIFF (text):
+#   - "resolved": "https://registry.npmjs.org/foo/-/foo-1.0.0.tgz",
+#   - "integrity": "sha512-abc123...",
+#   + "resolved": "https://registry.npmjs.org/foo/-/foo-1.0.1.tgz",
+#   + "integrity": "sha512-def456...",
+#   ... (repeated 500 times for all dependencies)
+#
+# EXAMPLE DIFF (binary):
+#   Binary files a/package-lock.json and b/package-lock.json differ
+
+# Generic lock files (catchall)
 *.lock                binary
+
+# Rust dependencies (Cargo)
+# Format: TOML (technically text)
+# Content: Dependency tree with checksums
+# Size: Can be 1000+ lines (large projects)
 Cargo.lock            binary
+
+# Node.js dependencies (npm)
+# Format: JSON (technically text)
+# Content: Flat dependency tree with URLs and hashes
+# Size: Often 10,000+ lines (complex web projects)
 package-lock.json     binary
+
+# Node.js dependencies (Yarn)
+# Format: YAML (technically text)
+# Content: Dependency tree with checksums
+# Size: Can be 5,000+ lines
 yarn.lock             binary
+
+# Node.js dependencies (pnpm)
+# Format: YAML (technically text)
+# Content: Content-addressable dependency tree
+# Size: Can be 3,000+ lines
 pnpm-lock.yaml        binary
+
+# Python dependencies (Poetry)
+# Format: TOML (technically text)
+# Content: Dependency tree with hashes
+# Size: Can be 1,000+ lines
 poetry.lock           binary
+
+# Ruby dependencies (Bundler)
+# Format: Custom text format
+# Content: Dependency tree with versions
+# Size: Can be 500+ lines
 Gemfile.lock          binary
 
+
 # --- TEMPLATES/EXAMPLES -------------------------------------------------------
+# Template and example files (copied by users, then customized)
+# Standard: LF (Unix convention for configs)
+
+# Example config files
+# Pattern: config.example, .env.example, settings.example
+# Used by: Projects to show config structure without exposing secrets
+# Wildcard: *.example matches any file ending in .example
+# Workflow: Copy config.example → config → Edit with real values
 *.example             text eol=lf
+
+# Template files
+# Pattern: template.sh, config_template, module.template
+# Used by: Code generators, scaffolding tools
+# Wildcard: *template* matches files with "template" anywhere in name
+# Workflow: Copy template → Rename → Fill in placeholders
 *template*            text eol=lf
 
+
 # --- ENVIRONMENT FILES --------------------------------------------------------
+# Environment variable definitions (KEY=value format)
+# Standard: LF (sourced by shell or dotenv loaders)
+#
+# FORMAT:
+#   KEY=value           # One per line
+#   DATABASE_URL=...    # No quotes needed (usually)
+#   # Comment           # Hash comments allowed
+#
+# USED BY:
+#   - Docker: env_file in docker-compose.yml
+#   - systemd: EnvironmentFile directive
+#   - Shell: source .env (bash)
+#   - Node.js: dotenv package (require('dotenv').config())
+#
+# CRITICAL: Must use LF (sourced by bash/sh)
+# With CRLF: Variables include CR character!
+#   # .env with CRLF:
+#   API_KEY=secret123\r\n
+#   # After source:
+#   echo "$API_KEY" | od -c
+#   # Shows: s e c r e t 1 2 3 \r \n (CR in value!)
+#   # Result: API calls fail (wrong key)
+
+# .env: Main environment file (local development)
 .env                  text eol=lf
+
+# .env variants: Environment-specific configs
+# Pattern: .env.* matches .env.local, .env.production, .env.test
+# Wildcard: * matches any suffix after .env.
+# Examples:
+#   .env.local (local overrides, not committed)
+#   .env.production (production secrets, encrypted or not committed)
+#   .env.test (test environment variables)
 .env.*                text eol=lf
 
+
 # --- GITHUB ACTIONS -----------------------------------------------------------
+# CI/CD workflow definitions (YAML format)
+# Standard: LF (YAML format, Unix convention)
+#
+# GITHUB ACTIONS SPECIFICS:
+#   - Runs on: Ubuntu runners (Linux by default)
+#   - YAML parser: Expects LF (CRLF may cause issues)
+#   - Indentation: YAML uses spaces (whitespace is syntax)
+#
+# LOCATION:
+#   .github/workflows/*.yml
+#   .github/workflows/*.yaml
+#
+# EXAMPLES:
+#   .github/workflows/ci.yml (continuous integration)
+#   .github/workflows/deploy.yml (deployment)
+#   .github/workflows/test.yaml (automated tests)
+
+# GitHub Actions workflows (YAML format)
+# Pattern: .github/workflows/*.yml
+# Matches: All .yml files in .github/workflows/ directory
 .github/workflows/*.yml   text eol=lf
+
+# GitHub Actions workflows (YAML alternative extension)
+# Pattern: .github/workflows/*.yaml
+# Matches: All .yaml files in .github/workflows/ directory
+# Note: .yml and .yaml are equivalent (same format)
 .github/workflows/*.yaml  text eol=lf
 
+
 # --- SPECIAL CASES ------------------------------------------------------------
-# Proxy bytes (diff safe)
+# Edge cases and unusual files
+
+# Proxy bytes for gitattributes
+# Used for: Testing, debugging Git attribute behavior
+# Purpose: Test how Git handles binary attribute
+# Format: Binary data (intentionally not text)
+# binary: Ensures no transformation during tests
+# Example use:
+#   # Create test file:
+#   echo -e "test\x00data" > test.proxy-gitattributes
+#   git add test.proxy-gitattributes
+#   # Git should NOT convert line endings (binary)
 *.proxy-gitattributes binary

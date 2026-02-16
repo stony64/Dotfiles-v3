@@ -6,274 +6,682 @@
 # CHANGES:     v3.6.7 - Dim .swp files, improved temp file colors
 # ------------------------------------------------------------------------------
 
+# ==============================================================================
+# LS_COLORS CONFIGURATION
+# ==============================================================================
+# Controls color output for ls, tree, and other directory listing tools
+# Format: FILE_TYPE <color_code>
+#
+# ANSI Color Code Format:
+#   [STYLE];[FG];[BG]
+#
+#   STYLE (text attributes):
+#     00 = Normal/Reset
+#     01 = Bold/Bright
+#     02 = Dim/Faint
+#     04 = Underline
+#     05 = Blink
+#     07 = Reverse (swap fg/bg)
+#
+#   FG (foreground color):
+#     30 = Black        90 = Bright Black (Gray)
+#     31 = Red          91 = Bright Red
+#     32 = Green        92 = Bright Green
+#     33 = Yellow       93 = Bright Yellow
+#     34 = Blue         94 = Bright Blue
+#     35 = Magenta      95 = Bright Magenta
+#     36 = Cyan         96 = Bright Cyan
+#     37 = White        97 = Bright White
+#
+#   BG (background color):
+#     40 = Black BG     100 = Bright Black BG
+#     41 = Red BG       101 = Bright Red BG
+#     42 = Green BG     102 = Bright Green BG
+#     43 = Yellow BG    103 = Bright Yellow BG
+#     44 = Blue BG      104 = Bright Blue BG
+#     45 = Magenta BG   105 = Bright Magenta BG
+#     46 = Cyan BG      106 = Bright Cyan BG
+#     47 = White BG     107 = Bright White BG
+#
+# Examples:
+#   01;32      → Bold Green
+#   00;90      → Dim Gray (low priority)
+#   37;41      → White text on Red background (alert!)
+#   01;34      → Bold Blue
+#
+# Usage:
+#   eval "$(dircolors ~/.dircolors)"  # Load colors
+#   ls --color=auto                   # Apply colors
+#
+# Documentation: man dircolors, man dir_colors
+# ==============================================================================
+
+
 # --- GLOBAL TERM SUPPORT ------------------------------------------------------
+# Terminal types that support colors (must be listed for colors to work)
+# dircolors checks $TERM against this list before applying colors
+# If $TERM not in list → colors disabled (safety for old terminals)
+
+# TERM xterm
+#   Basic xterm (8 colors)
+#   Most common terminal emulator base
 TERM xterm
+
+# TERM xterm-256color
+#   Extended xterm with 256 colors
+#   Modern standard for terminal colors
+#   Required for: Full color palette, gradients, advanced themes
 TERM xterm-256color
+
+# TERM screen
+#   GNU Screen terminal multiplexer (8 colors)
+#   Used when inside screen session
 TERM screen
+
+# TERM screen-256color
+#   GNU Screen with 256 color support
+#   Enable with: term screen-256color in ~/.screenrc
 TERM screen-256color
+
+# TERM tmux
+#   tmux terminal multiplexer (8 colors)
+#   Used when inside tmux session
 TERM tmux
+
+# TERM tmux-256color
+#   tmux with 256 color support
+#   Enable with: set -g default-terminal "tmux-256color" in ~/.tmux.conf
 TERM tmux-256color
+
+# TERM linux
+#   Linux virtual console (tty1-tty6)
+#   Limited colors (8 basic colors only)
+#   Accessed with: Ctrl+Alt+F1 through F6
 TERM linux
+
+# TERM kitty
+#   Kitty terminal emulator
+#   Modern GPU-accelerated terminal
+#   Supports: True color, ligatures, images
 TERM kitty
+
+# TERM alacritty
+#   Alacritty terminal emulator
+#   GPU-accelerated, written in Rust
+#   Fast rendering for large outputs
 TERM alacritty
+
+# TERM foot
+#   Foot terminal emulator (Wayland)
+#   Lightweight, fast, for Wayland compositors
 TERM foot
+
+# TERM wezterm
+#   WezTerm terminal emulator
+#   Cross-platform, GPU-accelerated
+#   Advanced features: tabs, splits, multiplexing
 TERM wezterm
 
+
 # --- ANSI BASE (Security/Permissions) -----------------------------------------
+# Core file types and special files with security implications
+# These colors help identify potentially dangerous or unusual files
+
+# RESET 0
+#   Reset all attributes (return to terminal default)
+#   Used internally to clear previous styling
 RESET 0
+
+# NORMAL 00
+#   Default color for normal text
+#   00 = No special styling (terminal default)
 NORMAL 00
+
+# FILE 00
+#   Default color for regular files (no extension match)
+#   00 = Plain text (no color)
+#   Example: README (no extension), data.bin
 FILE 00
 
-DIR 01;34                       # Directories: Bold Blue
-LINK 01;36                      # Symlinks: Bold Cyan
+# DIR 01;34
+#   Directories (folders)
+#   01;34 = Bold Blue
+#   Why blue: Convention (Windows Explorer, macOS Finder use blue)
+#   Why bold: Stand out from files (easy to spot directories)
+#   Example: /etc/, /home/user/, ./scripts/
+DIR 01;34
+
+# LINK 01;36
+#   Symbolic links (shortcuts to other files/dirs)
+#   01;36 = Bold Cyan
+#   Why cyan: Different from directories (blue) but related
+#   Why bold: Important to distinguish from regular files
+#   Example: /usr/bin/python → /usr/bin/python3.12
+LINK 01;36
+
+# MULTIHARDLINK 00
+#   Files with multiple hard links (same inode, different names)
+#   00 = Default color
+#   Why default: Rare, low priority (most users don't use hard links)
+#   Example: file1 and file2 point to same inode
 MULTIHARDLINK 00
-FIFO 40;33                      # Pipe: Yellow BG
-SOCK 01;35                      # Socket: Magenta
-DOOR 01;35                      # Door: Magenta
-BLK 40;33;01                    # Block device: Yellow BG Bold
-CHR 40;33;01                    # Char device: Yellow BG Bold
-ORPHAN 40;31;01                 # Broken symlink: Red BG Bold
-MISSING 00;00;01                # Missing: Bold Default
-SETUID 37;41                    # SUID: Red BG White
-SETGID 30;43                    # SGID: Yellow BG Black
-CAPABILITY 30;41                # Capabilities: Red BG Black
-STICKY_OTHER_WRITABLE 30;42     # Sticky writable: Green BG Black
-OTHER_WRITABLE 34;42            # World writable: Green BG Blue
-STICKY 37;44                    # Sticky: Blue BG White
-EXEC 01;32                      # Executable: Bold Green
+
+# FIFO 40;33
+#   Named pipes (inter-process communication)
+#   40;33 = Yellow background
+#   Why yellow background: Alert color (special file, not regular data)
+#   Example: /run/systemd/notify, mkfifo mypipe
+FIFO 40;33
+
+# SOCK 01;35
+#   Unix domain sockets (IPC mechanism)
+#   01;35 = Bold Magenta
+#   Why magenta: Special system file, needs attention
+#   Example: /run/docker.sock, /tmp/.X11-unix/X0
+SOCK 01;35
+
+# DOOR 01;35
+#   Door files (Solaris IPC, rarely used on Linux)
+#   01;35 = Bold Magenta
+#   Why magenta: Same as sockets (similar concept)
+#   Note: Uncommon on Linux (Solaris-specific)
+DOOR 01;35
+
+# BLK 40;33;01
+#   Block devices (disk drives, partitions)
+#   40;33;01 = Yellow background, Bold
+#   Why yellow background: Caution (writing can damage data)
+#   Example: /dev/sda, /dev/nvme0n1
+BLK 40;33;01
+
+# CHR 40;33;01
+#   Character devices (terminals, serial ports)
+#   40;33;01 = Yellow background, Bold
+#   Why yellow background: Caution (system devices)
+#   Example: /dev/tty, /dev/null, /dev/random
+CHR 40;33;01
+
+# ORPHAN 40;31;01
+#   Broken symbolic links (target doesn't exist)
+#   40;31;01 = Red background, Bold
+#   Why red: ERROR condition (link points to nothing)
+#   Example: link → /nonexistent/file
+#   Action: Delete or fix link
+ORPHAN 40;31;01
+
+# MISSING 00;00;01
+#   Missing file (referenced but doesn't exist)
+#   00;00;01 = Bold default
+#   Why bold: Highlight missing reference
+#   Rare: Usually only seen in broken situations
+MISSING 00;00;01
+
+# SETUID 37;41
+#   SUID files (run as file owner, not current user)
+#   37;41 = White text on Red background
+#   Why RED: SECURITY RISK (privilege escalation potential)
+#   Example: /usr/bin/sudo, /usr/bin/passwd
+#   Permission: -rwsr-xr-x (s in owner execute)
+#   Risk: If compromised, attacker gains owner's privileges
+SETUID 37;41
+
+# SETGID 30;43
+#   SGID files (run as file's group)
+#   30;43 = Black text on Yellow background
+#   Why YELLOW: SECURITY CAUTION (group privilege escalation)
+#   Example: /usr/bin/wall, group-shared directories
+#   Permission: -rwxr-sr-x (s in group execute)
+#   Risk: Attacker gains group privileges
+SETGID 30;43
+
+# CAPABILITY 30;41
+#   Files with Linux capabilities (fine-grained privileges)
+#   30;41 = Black text on Red background
+#   Why RED: SECURITY RISK (partial root privileges)
+#   Example: setcap cap_net_raw+ep /usr/bin/ping
+#   Capabilities: CAP_NET_RAW, CAP_SYS_ADMIN, etc.
+#   Check: getcap /path/to/file
+CAPABILITY 30;41
+
+# STICKY_OTHER_WRITABLE 30;42
+#   Sticky + world-writable directory (safe shared directory)
+#   30;42 = Black text on Green background
+#   Why GREEN: SAFE (sticky bit prevents deletion by others)
+#   Example: /tmp/ (drwxrwxrwt)
+#   Permission: drwxrwxrwt (t = sticky bit)
+#   Behavior: Only owner can delete files (despite world-writable)
+STICKY_OTHER_WRITABLE 30;42
+
+# OTHER_WRITABLE 34;42
+#   World-writable directory WITHOUT sticky bit
+#   34;42 = Blue text on Green background
+#   Why GREEN: CAUTION (anyone can delete files!)
+#   Example: drwxrwxrwx /shared/
+#   Permission: drwxrwxrwx (no sticky bit)
+#   Risk: Any user can delete ANY file in directory
+OTHER_WRITABLE 34;42
+
+# STICKY 37;44
+#   Sticky bit set (only owner can delete)
+#   37;44 = White text on Blue background
+#   Why BLUE: INFO (special permission, but safe)
+#   Example: /tmp/ (drwxrwxr-t)
+#   Permission: drwxr-xr-t (t at end)
+#   Behavior: Prevents deletion by non-owners
+STICKY 37;44
+
+# EXEC 01;32
+#   Executable files (scripts, binaries)
+#   01;32 = Bold Green
+#   Why GREEN: "Go" color (file can be executed)
+#   Example: /usr/bin/bash, ./script.sh (chmod +x)
+#   Permission: -rwxr-xr-x (x = executable)
+EXEC 01;32
+
 
 # --- ARCHIVES/COMPRESSED (Red) ------------------------------------------------
+# Archive and compressed files (data containers)
+# Color: Bold Red (01;31)
+# Rationale:
+#   - Red = "Stop" (don't edit directly, extract first)
+#   - Bold = Easy to spot in listings
+#   - Consistent with convention (many themes use red for archives)
+
+# Tar archives (tape archive, container format)
+# .tar: Uncompressed archive (multiple files in one)
 .tar 01;31
+
+# Gzip compressed tar archives
+# .tgz = .tar.gz (commonly used shorthand)
 .tgz 01;31
 .tar.gz 01;31
+
+# Bzip2 compressed tar archives
+# Better compression than gzip, slower
 .tar.bz2 01;31
 .tbz2 01;31
+
+# XZ compressed tar archives
+# Best compression ratio, modern standard
 .tar.xz 01;31
 .txz 01;31
+
+# Zstandard compressed tar archives
+# Fast compression/decompression, good ratio
 .tar.zst 01;31
+
+# ZIP archives (cross-platform standard)
+# Compatible with Windows, macOS, Linux
 .zip 01;31
+
+# 7-Zip archives (high compression ratio)
+# Better than ZIP, less common
 .7z 01;31
+
+# RAR archives (proprietary format)
+# Popular on Windows, requires unrar to extract
 .rar 01;31
+
+# LZ4 compressed files (extremely fast)
+# Used for kernel compression, log shipping
 .lz4 01;31
+
+# Standalone compression formats (single file)
 .gz 01;31
 .bz2 01;31
 .xz 01;31
 .zst 01;31
 .lzma 01;31
 
+
 # --- IMAGES/MEDIA (Magenta) ---------------------------------------------------
-# Images
+# Images, videos, and audio files
+# Color: Bold Magenta (01;35)
+# Rationale:
+#   - Magenta = Media convention (distinct from code/docs)
+#   - Bold = Easy to spot multimedia files
+#   - Not red (not dangerous), not blue (not code)
+
+# Images (raster formats)
 .jpg 01;35
 .jpeg 01;35
 .png 01;35
 .gif 01;35
-.webp 01;35
-.avif 01;35
-.svg 01;35
-.ico 01;35
-.bmp 01;35
+.webp 01;35      # Modern web format (smaller than PNG/JPEG)
+.avif 01;35      # Next-gen format (better compression)
+.svg 01;35       # Vector graphics (scalable)
+.ico 01;35       # Icons (Windows/web favicons)
+.bmp 01;35       # Bitmap (uncompressed, large)
 
-# Video
-.mp4 01;35
-.mkv 01;35
-.avi 01;35
-.mov 01;35
-.webm 01;35
+# Video formats
+.mp4 01;35       # H.264/H.265 (most common)
+.mkv 01;35       # Matroska (open format, high quality)
+.avi 01;35       # Audio Video Interleave (older, Windows)
+.mov 01;35       # QuickTime (Apple standard)
+.webm 01;35      # Web video (VP8/VP9/AV1)
 
-# Audio
-.mp3 01;35
-.flac 01;35
-.wav 01;35
-.ogg 01;35
-.m4a 01;35
+# Audio formats
+.mp3 01;35       # MPEG Audio Layer 3 (lossy, universal)
+.flac 01;35      # Free Lossless Audio Codec (lossless)
+.wav 01;35       # Waveform Audio (uncompressed)
+.ogg 01;35       # Ogg Vorbis (open format, lossy)
+.m4a 01;35       # MPEG-4 Audio (Apple iTunes)
+
 
 # --- DOCUMENTS (Green/Yellow) -------------------------------------------------
-.pdf 00;32
-.doc 00;32
-.docx 00;32
-.odt 00;32
-.txt 00;90              # Plain text: Bright Black (dim)
-.md 01;33               # Markdown: Bold Yellow
-.mdx 01;33
-.rst 01;33              # reStructuredText
-.org 01;33              # Org-mode
+# Document files (human-readable content)
+# Colors: Green for binary docs, Yellow for text-based
+
+# Binary document formats (00;32 = Green)
+# Why green: Readable content (documents)
+# Why not bold: Less important than code
+.pdf 00;32       # Portable Document Format (universal)
+.doc 00;32       # Microsoft Word (legacy)
+.docx 00;32      # Microsoft Word (modern, XML-based)
+.odt 00;32       # OpenDocument Text (open standard)
+
+# Plain text files (00;90 = Dim Gray)
+# Why dim: Low priority (no formatting, basic)
+.txt 00;90
+
+# Markup/documentation languages (01;33 = Bold Yellow)
+# Why yellow: Important documentation
+# Why bold: Higher priority than plain .txt
+.md 01;33        # Markdown (GitHub, documentation)
+.mdx 01;33       # Markdown + JSX (React documentation)
+.rst 01;33       # reStructuredText (Python documentation)
+.org 01;33       # Org-mode (Emacs documentation)
+
 
 # --- SCRIPTS/EXECUTABLES (Green) ----------------------------------------------
+# Interpreted scripts and source code (executable)
+# Color: Bold Green (01;32) for runnable scripts
+# Rationale: Green = "Go" (can be executed)
+
 # Shell scripts
-.sh 01;32
-.bash 01;32
-.zsh 01;32
-.fish 01;32
+.sh 01;32        # Bourne shell/bash (universal)
+.bash 01;32      # Bash-specific scripts
+.zsh 01;32       # Z shell scripts
+.fish 01;32      # Friendly Interactive Shell
 
 # Python
-.py 01;32
-.pyw 01;32
-.pyc 00;90              # Compiled Python: Bright Black (dim)
-.pyo 00;90
+.py 01;32        # Python source (executable with shebang)
+.pyw 01;32       # Python Windows (no console)
+.pyc 00;90       # Python bytecode (compiled, low priority)
+.pyo 00;90       # Python optimized bytecode (deprecated)
 
-# Other scripting
-.rb 01;32               # Ruby
-.lua 01;32              # Lua
-.php 01;32              # PHP
-.pl 01;32               # Perl
-.r 01;32                # R
+# Other scripting languages
+.rb 01;32        # Ruby scripts
+.lua 01;32       # Lua scripts
+.php 01;32       # PHP scripts
+.pl 01;32        # Perl scripts
+.r 01;32         # R statistical scripts
+
 
 # --- COMPILED/SYSTEMS LANGUAGES (Cyan) ----------------------------------------
-.c 01;36
-.cpp 01;36
-.cc 01;36
-.cxx 01;36
-.h 01;36
-.hpp 01;36
-.rs 01;36               # Rust
-.go 01;36               # Go
-.java 01;36             # Java
-.class 00;36            # Java bytecode
+# Source code for compiled languages (not directly executable)
+# Color: Bold Cyan (01;36)
+# Rationale:
+#   - Cyan = Code (distinct from green executables)
+#   - Bold = Important source files
+#   - Must be compiled before running (not executable as-is)
+
+# C/C++ source and headers
+.c 01;36         # C source
+.cpp 01;36       # C++ source
+.cc 01;36        # C++ source (alternative extension)
+.cxx 01;36       # C++ source (alternative extension)
+.h 01;36         # C/C++ header
+.hpp 01;36       # C++ header
+
+# Modern systems languages
+.rs 01;36        # Rust source
+.go 01;36        # Go source
+.java 01;36      # Java source
+.class 00;36     # Java bytecode (compiled, lower priority)
+
 
 # --- WEB LANGUAGES (Cyan) -----------------------------------------------------
-.js 01;36
-.mjs 01;36
-.ts 01;36
-.jsx 01;36
-.tsx 01;36
-.vue 01;36
-.html 01;36
-.htm 01;36
-.css 01;36
-.scss 01;36
-.sass 01;36
-.less 01;36
+# Web development source files
+# Color: Bold Cyan (01;36)
+# Rationale: Same as systems languages (source code, not executable)
+
+# JavaScript/TypeScript
+.js 01;36        # JavaScript
+.mjs 01;36       # JavaScript module (ES6)
+.ts 01;36        # TypeScript
+.jsx 01;36       # React (JavaScript + XML)
+.tsx 01;36       # React (TypeScript + XML)
+.vue 01;36       # Vue.js components
+
+# Markup/Styling
+.html 01;36      # HTML markup
+.htm 01;36       # HTML (alternative extension)
+.css 01;36       # Cascading Style Sheets
+.scss 01;36      # Sass (CSS preprocessor)
+.sass 01;36      # Sass (indented syntax)
+.less 01;36      # Less (CSS preprocessor)
+
 
 # --- CONFIGURATION (Blue/Cyan) ------------------------------------------------
-.conf 00;36
-.config 00;36
-.cfg 00;36
-.ini 00;36
-.json 00;36
-.jsonc 00;36
-.toml 01;33
-.yaml 01;33
-.yml 01;33
-.xml 00;36
-.env 40;33              # Environment: Yellow BG (sensitive!)
-.env.local 40;33
-.env.example 00;36
+# Configuration files (application/system settings)
+# Colors: Cyan (00;36) for generic, Yellow (01;33) for important
 
-# System junk (Red BG - should be gitignored)
-.DS_Store 40;31
-Thumbs.db 40;31
-desktop.ini 40;31
+# Generic config formats (00;36 = Cyan)
+# Why cyan: Config files (not code, not docs)
+# Why not bold: Lower priority than code
+.conf 00;36      # Generic configuration
+.config 00;36    # Configuration (verbose name)
+.cfg 00;36       # Configuration (short name)
+.ini 00;36       # INI format (Windows-style)
+.json 00;36      # JSON (structured data)
+.jsonc 00;36     # JSON with comments
+.xml 00;36       # XML (structured markup)
+
+# Important config formats (01;33 = Bold Yellow)
+# Why yellow: More important (build configs, deployment)
+.toml 01;33      # TOML (Rust Cargo, modern configs)
+.yaml 01;33      # YAML (Docker, Kubernetes, CI/CD)
+.yml 01;33       # YAML (short extension)
+
+# Environment files (40;33 = Yellow background)
+# Why YELLOW BG: SECURITY WARNING (may contain secrets!)
+# Contains: API keys, passwords, database credentials
+.env 40;33
+.env.local 40;33
+.env.example 00;36  # Example template (safe, no secrets)
+
+# System junk (40;31 = Red background)
+# Why RED BG: Pollution (should be in .gitignore)
+# Should NOT be committed to version control
+.DS_Store 40;31      # macOS Finder metadata (useless)
+Thumbs.db 40;31      # Windows thumbnail cache (useless)
+desktop.ini 40;31    # Windows folder settings (useless)
+
 
 # --- PACKAGE MANAGERS/LOCKFILES (Dim - less important) -----------------------
-.lock 00;90
-package-lock.json 00;90
-yarn.lock 00;90
-pnpm-lock.yaml 00;90
-Cargo.lock 00;90
-Gemfile.lock 00;90
-poetry.lock 00;90
-Pipfile.lock 00;90
+# Dependency lock files (auto-generated, large, not human-edited)
+# Color: Dim Gray (00;90)
+# Rationale:
+#   - Low priority (machine-generated)
+#   - Don't need to inspect regularly
+#   - Treated as binary in git (no useful diffs)
+
+.lock 00;90              # Generic lock files
+package-lock.json 00;90  # npm (Node.js)
+yarn.lock 00;90          # Yarn (Node.js)
+pnpm-lock.yaml 00;90     # pnpm (Node.js)
+Cargo.lock 00;90         # Cargo (Rust)
+Gemfile.lock 00;90       # Bundler (Ruby)
+poetry.lock 00;90        # Poetry (Python)
+Pipfile.lock 00;90       # Pipenv (Python)
+
 
 # --- CONTAINER/DEVOPS (Blue/Cyan) ---------------------------------------------
-Dockerfile 01;34
-.dockerignore 01;31
-docker-compose.yml 01;34
+# DevOps and container configuration files
+# Colors: Blue for Docker, Cyan for Kubernetes
+
+# Docker (01;34 = Bold Blue)
+Dockerfile 01;34              # Docker build instructions
+.dockerignore 01;31           # Docker ignore patterns (red = ignore)
+docker-compose.yml 01;34      # Docker Compose orchestration
 docker-compose.yaml 01;34
-.kubeconfig 40;36       # Kubernetes: Cyan BG
-.helm 01;34
-.tf 01;34               # Terraform
-.hcl 01;34
-.nomad 01;34
+
+# Kubernetes (40;36 = Cyan background)
+# Why background: Important (cluster configuration)
+.kubeconfig 40;36
+
+# Other DevOps tools (01;34 = Bold Blue)
+.helm 01;34      # Helm charts (Kubernetes package manager)
+.tf 01;34        # Terraform (infrastructure as code)
+.hcl 01;34       # HashiCorp Configuration Language
+.nomad 01;34     # Nomad (HashiCorp orchestrator)
+
 
 # --- GIT (Cyan) ---------------------------------------------------------------
-.gitignore 00;36
-.gitattributes 00;36
-.gitmodules 00;36
-.gitconfig 00;36
+# Git configuration and metadata files
+# Color: Cyan (00;36)
+# Rationale: Config files (not code, not docs)
+
+.gitignore 00;36      # Ignore patterns (which files NOT to track)
+.gitattributes 00;36  # File handling rules (line endings, diff)
+.gitmodules 00;36     # Submodule definitions
+.gitconfig 00;36      # Git configuration
+
 
 # --- EDITOR CONFIGS (Blue) ----------------------------------------------------
-.editorconfig 00;34
-.shellcheckrc 00;34
-.markdownlint.json 00;34
+# Editor and linter configuration files
+# Color: Blue (00;34)
+# Rationale: Tool configs (less important than code)
+
+.editorconfig 00;34           # Editor settings (cross-editor)
+.shellcheckrc 00;34           # ShellCheck linter config
+.markdownlint.json 00;34      # Markdown linter config
 .markdownlint.jsonc 00;34
-.prettierrc 00;34
-.eslintrc 00;34
+.prettierrc 00;34             # Prettier formatter config
+.eslintrc 00;34               # ESLint linter config
+
 
 # --- PROXMOX/VIRTUALIZATION (Blue/Magenta) ------------------------------------
-.pve 01;34              # Proxmox config
-.qm 01;34               # QEMU VM
-.pct 01;34              # LXC container
-.vzctl 01;35
+# Proxmox VE and virtualization configuration files
+# Colors: Blue for configs, Magenta for VM/CT definitions
+
+# Proxmox configs (01;34 = Bold Blue)
+# Why blue: System configuration (important)
+.pve 01;34       # Proxmox VE config
+.qm 01;34        # QEMU VM definition
+.pct 01;34       # LXC container definition
+.vzctl 01;35     # OpenVZ control (magenta, legacy)
+
 
 # --- ZFS/STORAGE (Yellow BG - caution) ----------------------------------------
-.zfs 40;33
-.pool 40;33
-.snapshot 40;33
+# ZFS and storage configuration files
+# Color: Yellow background (40;33)
+# Rationale:
+#   - CAUTION: Storage configs (mistakes can lose data)
+#   - Not as critical as SUID (yellow, not red)
+
+.zfs 40;33       # ZFS dataset configuration
+.pool 40;33      # ZFS pool configuration
+.snapshot 40;33  # ZFS snapshot metadata
+
 
 # --- LOGS/TEMP (Dim/BG) -------------------------------------------------------
-# Log files
-.log 00;37              # Logs: White
+# Log files, temporary files, and backups
+# Colors: Dim gray for temp, Red BG for backups
 
-# Temporary files (dimmed - low priority)
-.tmp 00;90              # Temp: Bright Black (dim)
+# Log files (00;37 = White)
+# Why white: Readable but not highlighted
+.log 00;37
+
+# Temporary files (00;90 = Dim Gray)
+# Why dim: Low priority (temporary, disposable)
+.tmp 00;90
 .temp 00;90
 .cache 00;90
-.pid 00;90
+.pid 00;90       # Process ID files (runtime only)
 
-# Backup files (Red BG - should be cleaned)
-.bak 40;31              # Backup: Red BG
-.bak_* 40;31
+# Backup files (40;31 = Red background)
+# Why RED BG: Pollution (should be cleaned up or .gitignored)
+.bak 40;31       # Backup files
+.bak_* 40;31     # Numbered backups (file.bak_1, file.bak_2)
 .backup 40;31
-.old 40;31
+.old 40;31       # Old versions
 
-# Editor temporary files (dimmed - not important)
-.swp 00;90              # Vim swap: Bright Black (dim, unobtrusive)
-.swo 00;90              # Vim swap overflow: Bright Black
-.swn 00;90              # Vim swap additional: Bright Black
-*~ 00;90                # Editor backup files: Bright Black (dim)
-.#* 00;90               # Emacs lock files: Bright Black
-\#*\# 00;90             # Emacs auto-save: Bright Black
+# Editor temporary files (00;90 = Dim Gray)
+# Why dim: Unimportant (editor state, not content)
+.swp 00;90       # Vim swap files (active editing)
+.swo 00;90       # Vim swap overflow
+.swn 00;90       # Vim additional swap
+*~ 00;90         # Editor backup files (file~)
+.#* 00;90        # Emacs lock files (.#file)
+\#*\# 00;90      # Emacs auto-save files (#file#)
+
 
 # --- SHELL/DOTFILES (Green) ---------------------------------------------------
-.bash_profile 01;32
-.bash_login 01;32
-.bash_logout 01;32
-.bashrc 01;32
-.bashenv 01;32
-.bashprompt 01;32
-.bashaliases 01;32
-.bashfunctions 01;32
-.bashwartung 01;32
-.zshrc 01;32
-.zshenv 01;32
-.profile 01;32
+# Shell configuration and dotfiles framework files
+# Color: Bold Green (01;32)
+# Rationale: Executable configs (sourced by shell)
 
-# Framework files (Bold Cyan)
-core.sh 01;36
-dotfilesctl.sh 01;36
-collect-review.sh 01;36
+# Standard shell dotfiles
+.bash_profile 01;32   # Bash login shell initialization
+.bash_login 01;32     # Bash login shell (alternative)
+.bash_logout 01;32    # Bash logout actions
+.bashrc 01;32         # Bash interactive shell config
+.bashenv 01;32        # Environment variables (framework)
+.bashprompt 01;32     # Prompt configuration (framework)
+.bashaliases 01;32    # Aliases (framework)
+.bashfunctions 01;32  # Functions (framework)
+.bashwartung 01;32    # Maintenance tasks (framework)
+.zshrc 01;32          # Z shell config
+.zshenv 01;32         # Z shell environment
+.profile 01;32        # POSIX shell profile
+
+# Framework core files (01;36 = Bold Cyan)
+# Why cyan: Important source code (not dotfiles)
+core.sh 01;36              # Framework core library
+dotfilesctl.sh 01;36       # Framework controller script
+collect-review.sh 01;36    # Code review collection tool
+
 
 # --- PACKAGES (Yellow) --------------------------------------------------------
-.deb 01;33
-.rpm 01;33
-.AppImage 01;33
-.snap 01;33
-.flatpak 01;33
-.apk 01;33              # Alpine
-.pkg 01;33              # macOS
+# System packages and installers
+# Color: Bold Yellow (01;33)
+# Rationale: Important (software distribution files)
+
+.deb 01;33       # Debian package (Ubuntu, Debian)
+.rpm 01;33       # RPM package (RHEL, Fedora, SUSE)
+.AppImage 01;33  # AppImage (universal Linux binary)
+.snap 01;33      # Snap package (Ubuntu)
+.flatpak 01;33   # Flatpak (universal Linux app)
+.apk 01;33       # Alpine package (Alpine Linux)
+.pkg 01;33       # macOS package
+
 
 # --- DISK IMAGES (Yellow) -----------------------------------------------------
-.iso 01;33
-.img 01;33
-.qcow2 01;33
-.vmdk 01;33
-.vdi 01;33
+# Disk images and virtual disks
+# Color: Bold Yellow (01;33)
+# Rationale: Important (system/VM images, large files)
+
+.iso 01;33       # ISO disk image (bootable CD/DVD)
+.img 01;33       # Raw disk image
+.qcow2 01;33     # QEMU copy-on-write v2 (KVM/Proxmox)
+.vmdk 01;33      # VMware virtual disk
+.vdi 01;33       # VirtualBox disk image
+
 
 # --- BUILD ARTIFACTS (Dim - should be ignored) --------------------------------
-.o 00;90                # Object files
-.so 00;90               # Shared objects
-.a 00;90                # Static libraries
-.dll 00;90              # Windows libraries
-.exe 01;31              # Windows executables
-.pyc 00;90              # Python bytecode
-.pyo 00;90              # Python optimized
+# Compiled output and build artifacts
+# Color: Dim Gray (00;90)
+# Rationale:
+#   - Low priority (generated files)
+#   - Should be in .gitignore
+#   - Rebuilt from source
+
+.o 00;90         # Object files (C/C++ compilation intermediate)
+.so 00;90        # Shared objects (Linux libraries)
+.a 00;90         # Static libraries (C/C++)
+.dll 00;90       # Dynamic-link libraries (Windows)
+.exe 01;31       # Windows executables (red = alert on Linux!)
+.pyc 00;90       # Python bytecode (compiled .py)
+.pyo 00;90       # Python optimized bytecode (deprecated)

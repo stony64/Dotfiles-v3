@@ -8,42 +8,82 @@
 # ------------------------------------------------------------------------------
 
 # ShellCheck configuration
-# shellcheck source=/dev/null disable=SC2120,SC2154
+# SC2120: Function references $@ but no argument passed (OK for wrappers)
+# SC2154: Variable referenced but not assigned (OK for arrays from detection logic)
+# shellcheck source=/dev/null disable=SC2120 disable=SC2154
 
 # --- CORE & SECURITY ----------------------------------------------------------
 
 # SUDO TRICK: Allows Bash to check the word after sudo for aliases
+# Without trailing space: sudo ll → tries to run 'll' binary (not alias)
+# With trailing space: sudo ll → expands 'll' alias, then runs with sudo
+# Technical: Trailing space tells bash to check next word for alias expansion
 alias sudo='sudo '
 
-alias cp='cp -i --preserve=all'            # Interactive copy with metadata
-alias mv='mv -i --preserve=all'            # Interactive move
-alias rm='rm -i --preserve-root=always'    # Protection against 'rm -rf /'
-alias ln='ln -i -v'                        # Interactive and verbose links
-alias chown='chown --preserve-root'        # Root protection
-alias chmod='chmod --preserve-root'        # Root protection
-alias mkdir='mkdir -p -v'                  # Creates path structures verbosely
+# Interactive file operations (confirm before destructive actions)
+# -i: Interactive (prompt before overwrite/delete)
+# --preserve=all: Keep timestamps, permissions, ownership, xattrs
+alias cp='cp -i --preserve=all'
+alias mv='mv -i --preserve=all'
+
+# rm protection: Prevent accidental 'rm -rf /' disasters
+# -i: Interactive confirmation
+# --preserve-root=always: Never delete / (even with --no-preserve-root)
+alias rm='rm -i --preserve-root=always'
+
+# Safe linking (interactive and verbose)
+# -i: Prompt before overwrite
+# -v: Verbose (show what's being created)
+alias ln='ln -i -v'
+
+# chown/chmod protection: Prevent recursive changes on /
+# --preserve-root: Refuse to operate on / recursively
+alias chown='chown --preserve-root'
+alias chmod='chmod --preserve-root'
+
+# mkdir improvements
+# -p: Create parent directories as needed (no error if exists)
+# -v: Verbose (show each directory created)
+alias mkdir='mkdir -p -v'
 
 # --- NAVIGATION ---------------------------------------------------------------
-alias ..='cd ..'
-alias ...='cd ../...'
-alias ....='cd ../../..'
-alias -- -='cd -'                          # Quick return to last directory
-alias home='cd ~'
+# Quick directory navigation shortcuts
+
+alias ..='cd ..'              # Up one level
+alias ...='cd ../...'         # Up two levels
+alias ....='cd ../../..'      # Up three levels
+alias -- -='cd -'             # Return to last directory (-- prevents dash interpretation as option)
+alias home='cd ~'             # Jump to home directory
 
 # --- DYNAMIC LS LOGIC (TOOL-AWARE) --------------------------------------------
+# Automatically detects and uses best available ls alternative
+# Priority: eza (modern, fastest) > lsd (modern) > ls (classic)
+#
+# Rationale:
+#   - eza: Rust-based, fast, git integration, icons
+#   - lsd: Rust-based, fast, icons
+#   - ls: GNU coreutils (universal fallback)
+#
+# Detection runs once at shell startup for performance
 
-# Detect available tool once at load time
+# Detect available tool once at load time (not on every ls call)
 if command -v eza >/dev/null 2>&1; then
+    # eza: Modern replacement for ls (https://github.com/eza-community/eza)
     _ls_tool="eza"
     _ls_flags=(--group-directories-first --git --icons)
     _ls_time=(--time-style=long-iso)
 elif command -v lsd >/dev/null 2>&1; then
+    # lsd: LSDeluxe (https://github.com/lsd-rs/lsd)
     _ls_tool="lsd"
     _ls_flags=(--group-dirs-first --icon always)
     _ls_time=(--date=long-iso)
 else
+    # Fallback to classic GNU ls
     _ls_tool="ls"
     _ls_time=(--time-style=long-iso)
+
+    # Check if --group-directories-first is supported (GNU ls 8.x+)
+    # Some older systems or macOS don't support this flag
     if command ls --group-directories-first . >/dev/null 2>&1; then
         _ls_flags=(--color=auto --group-directories-first)
     else
@@ -52,81 +92,214 @@ else
 fi
 
 # Protect ls configuration from modification (prevent accidental override)
+# readonly: Prevents variable reassignment (security/stability)
+# Without: User could accidentally run "_ls_tool=rm" and break ls
 readonly _ls_tool
 readonly _ls_flags
 readonly _ls_time
 
-# shellcheck disable=SC2120,SC2154
+# ls wrapper functions (replace built-in ls command)
+# command: Bypass aliases/functions, call actual binary
+# "${_ls_flags[@]}": Array expansion (preserves spaces in flags)
+# "$@": Pass through all arguments to function
+#
+# SC2120: Function uses $@ but may be called without args (intended)
+# SC2154: Variables set by detection logic above
+# shellcheck disable=SC2120
+# shellcheck disable=SC2154
 ls() { command "$_ls_tool" "${_ls_flags[@]}" "$@"; }
-# shellcheck disable=SC2120,SC2154
+
+# ll: Long listing with all files, including hidden (detailed view)
+# -l: Long format (permissions, owner, size, date)
+# -a: Show all files (including . and ..)
+# shellcheck disable=SC2120
+# shellcheck disable=SC2154
 ll() { command "$_ls_tool" "${_ls_flags[@]}" -la "${_ls_time[@]}" "$@"; }
-# shellcheck disable=SC2120,SC2154
+
+# la: Long listing, almost all (excludes . and ..)
+# -l: Long format
+# -A: Show hidden files but not . and ..
+# shellcheck disable=SC2120
+# shellcheck disable=SC2154
 la() { command "$_ls_tool" "${_ls_flags[@]}" -lA "$@"; }
-# shellcheck disable=SC2120,SC2154
+
+# l: Long listing with human-readable sizes
+# -l: Long format
+# -h: Human-readable sizes (1K, 234M, 2G)
+# shellcheck disable=SC2120
+# shellcheck disable=SC2154
 l()  { command "$_ls_tool" "${_ls_flags[@]}" -lh "$@"; }
 
 # --- SYSTEM & RESOURCES -------------------------------------------------------
+# System monitoring and resource display aliases
+
+# df: Disk free space with exclusions
+# -h: Human-readable sizes (1K, 234M, 2G)
+# -T: Show filesystem type (ext4, zfs, btrfs)
+# -x: Exclude filesystem types (tmpfs, devtmpfs = temporary/virtual filesystems)
 alias df='df -hT -x tmpfs -x devtmpfs -x squashfs -x overlay'
+
+# du: Disk usage with human-readable sizes
+# -h: Human-readable (1K, 234M, 2G)
 alias du='du -h'
+
+# free: Memory usage with SI units
+# -h: Human-readable
+# --si: Use powers of 1000 (not 1024) for consistency with disk tools
 alias free='free -h --si'
+
+# uptime: Pretty format (e.g., "up 2 days, 5 hours")
+# -p: Pretty format (human-readable)
 alias uptime='uptime -p'
+
+# Clear screen alias
 alias cls='clear'
 
+# systemctl shortcut (service management)
 alias sc='systemctl'
+
+# journalctl: Show last 50 log entries without pager
+# -n 50: Show last 50 lines
+# --no-pager: Direct output (don't use less)
 alias jc='journalctl -n 50 --no-pager'
+
+# psmem: Show top 15 processes by memory usage
+# ps auxf: All processes with full format (f = forest/tree view)
+# sort -nr -k 4: Numeric reverse sort on column 4 (memory %)
+# head -15: Show top 15 results
 alias psmem='ps auxf | sort -nr -k 4 | head -15'
 
 # --- DIAGNOSTICS & NETWORK ----------------------------------------------------
+# System diagnostics and network monitoring aliases
+
+# journal: View system logs in less with colors
+# -n 50: Last 50 lines
+# --no-pager: Pipe to less manually (for -R flag)
+# less -R: Display ANSI colors correctly
 alias journal='journalctl -n 50 --no-pager | less -R'
+
+# dmesg: Kernel ring buffer with colors and timestamps
+# --color=always: Colored output
+# -H: Human-readable timestamps
+# -T: Print timestamps (not relative)
 alias dmesg='dmesg --color=always -H -T'
+
+# psg: Process grep (search running processes)
+# ps auxf: All processes with tree view
+# grep -v grep: Exclude grep itself from results
+# grep -i -e VSZ -e: Case-insensitive, show header (VSZ) and search term
 alias psg='ps auxf | grep -v grep | grep -i -e VSZ -e'
+
+# ports: Show listening ports with process information
+# ss: Socket statistics (modern netstat replacement)
+# -t: TCP sockets
+# -u: UDP sockets
+# -l: Listening sockets
+# -p: Show process using socket
+# -n: Numeric (don't resolve hostnames/services)
+# grep LISTEN: Filter to listening sockets only
 alias ports='ss -tulpn | grep LISTEN'
+
+# ssh: Enhanced SSH with keepalive and 256-color support
+# TERM=xterm-256color: Ensure colors work on remote host
+# -o ServerAliveInterval=60: Send keepalive every 60s (prevents timeout)
 alias ssh='TERM=xterm-256color ssh -o ServerAliveInterval=60'
 
 # --- TEXT PROCESSING ----------------------------------------------------------
+# Text search and editor enhancements
+
+# grep: Colored output, skip binary files
+# --color=auto: Colored matches (only when outputting to terminal)
+# --binary-files=without-match: Skip binary files (prevents garbage output)
 alias grep='grep --color=auto --binary-files=without-match'
+
+# fgrep: Fixed-string grep (no regex, faster for literal strings)
+# -F: Treat pattern as fixed string (not regex)
 alias fgrep='grep -F --color=auto'
+
+# egrep: Extended regex grep (supports +, ?, |, etc.)
+# -E: Extended regex syntax
 alias egrep='grep -E --color=auto'
+
+# rgrep: Recursive grep with exclusions
+# -r: Recursive
+# -n: Show line numbers
+# -i: Case-insensitive
+# --exclude-dir: Skip directories (build artifacts, version control)
 alias rgrep='grep -rni --exclude-dir={.git,node_modules}'
+
+# nano: Show line numbers
+# -c: Display line/column numbers at bottom
 alias nano='nano -c'
+
+# less: Display ANSI colors correctly
+# -R: Raw control chars (allows colors)
 alias less='less -R'
 
 # --- GIT POWER-SHORTCUTS ------------------------------------------------------
-alias g='git'
-alias st='git status'
-alias co='git checkout'
-alias br='git branch -v'
-alias cm='git commit -m'
-alias gd='git diff --stat'
+# Git command shortcuts for faster workflow
+
+alias g='git'                # Ultra-short git
+alias st='git status'        # Status
+alias co='git checkout'      # Checkout
+alias br='git branch -v'     # Branch list with last commit
+alias cm='git commit -m'     # Commit with message
+alias gd='git diff --stat'   # Diff statistics (files changed)
+
+# lg: Pretty git log with graph
+# --graph: Show branch/merge graph
+# --pretty=format: Custom format string
+#   %C(yellow): Yellow color
+#   %h: Short commit hash (7 chars)
+#   %Creset: Reset color
+#   %C(auto)%d: Auto-colored refs (branches, tags)
+#   %s: Commit subject (first line)
+#   %Cgreen(%cr): Green relative date ("2 days ago")
+#   %C(bold blue)<%an>: Bold blue author name
+# --abbrev-commit: Show short hashes (not full 40-char)
+# -15: Show last 15 commits
 alias lg="git log --graph --pretty=format:'%C(yellow)%h%Creset -%C(auto)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit -15"
 
 # ------------------------------------------------------------------------------
 # push_upstream
 #
 # Intelligently pushes to upstream; sets tracking if missing.
-# Validates git repo and handles errors gracefully.
+# Safer than raw 'git push' by handling common scenarios gracefully.
+#
+# Features:
+#   - Auto-sets upstream if missing (--set-upstream)
+#   - Supports safe force push (--force-with-lease)
+#   - Validates git repository and branch
+#   - Clear error messages and recovery hints
 #
 # Parameters:
-#   --force  Use force-with-lease (safe force push)
+#   --force, -f   Use force-with-lease (safe force push)
 #
 # Returns: 0 success, 1 failure
 #
 # Examples:
-#   push_upstream           # Normal push
+#   push_upstream           # Normal push, set upstream if missing
 #   push_upstream --force   # Force push with lease (safe)
+#   push-force              # Alias for push_upstream --force
+#
+# Why force-with-lease instead of force?
+#   --force: Overwrites remote regardless (can lose others' work)
+#   --force-with-lease: Only succeeds if remote matches local expectation
+#     (safe: won't overwrite if someone else pushed meanwhile)
 # ------------------------------------------------------------------------------
 push_upstream() {
     local current_branch
     local use_force=false
-    local push_args=()
+    local push_args=()  # Array to build git push arguments
 
-    # Parse arguments
+    # Parse function arguments (only --force supported)
     for arg in "$@"; do
         case "$arg" in
             --force|-f)
                 use_force=true
                 ;;
             *)
+                # Unknown argument - show usage and fail
                 printf '\033[31m[ERR]\033[0m Unknown argument: %s\n' "$arg" >&2
                 printf 'Usage: push_upstream [--force]\n' >&2
                 return 1
@@ -135,22 +308,28 @@ push_upstream() {
     done
 
     # Verify we're in a git repository
+    # rev-parse --is-inside-work-tree: Returns 0 if in git repo
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         printf '\033[31m[ERR]\033[0m Not a git repository\n' >&2
         return 1
     fi
 
     # Get current branch name
+    # branch --show-current: Returns current branch name (empty if detached HEAD)
     current_branch="$(git branch --show-current 2>/dev/null)"
     if [[ -z "$current_branch" ]]; then
         printf '\033[31m[ERR]\033[0m Failed to determine current branch\n' >&2
         return 1
     fi
 
-    # Check if upstream is set
+    # Check if upstream tracking branch is set
+    # @{u} = upstream tracking branch (e.g., origin/main)
+    # This command fails if no upstream is configured
     if ! git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+        # No upstream - set it during push
         printf '\033[33m[INFO]\033[0m No upstream set, pushing with --set-upstream\n'
 
+        # Build push arguments: set upstream to origin/<branch>
         push_args=(--set-upstream origin "$current_branch")
 
         # Add force-with-lease if requested
@@ -159,25 +338,29 @@ push_upstream() {
             push_args+=(--force-with-lease)
         fi
 
+        # Execute push with upstream setup
         if ! git push "${push_args[@]}"; then
             printf '\033[31m[ERR]\033[0m Failed to push and set upstream\n' >&2
             return 1
         fi
     else
-        # Upstream exists
+        # Upstream exists - push normally or force
         if [[ "$use_force" == true ]]; then
             printf '\033[33m[WARN]\033[0m Force pushing with --force-with-lease to %s\n' "$current_branch"
 
             # force-with-lease is safer than --force:
+            # - Checks if remote ref matches expected value
             # - Prevents overwriting other's work
             # - Only succeeds if remote branch matches local expectation
+            # Example: If someone pushed to origin/main after you fetched,
+            #          force-with-lease will reject (force would overwrite!)
             if ! git push --force-with-lease; then
                 printf '\033[31m[ERR]\033[0m Force push failed (remote has changes?)\n' >&2
                 printf '\033[33m[TIP]\033[0m Try: git pull --rebase && push_upstream --force\n'
                 return 1
             fi
         else
-            # Normal push
+            # Normal push (no force)
             if ! git push; then
                 printf '\033[31m[ERR]\033[0m Failed to push\n' >&2
                 return 1
@@ -185,28 +368,51 @@ push_upstream() {
         fi
     fi
 
+    # Success message
     printf '\033[32m[OK]\033[0m Successfully pushed to upstream\n'
 }
 
-# Convenient alias for force push
+# Convenient alias for force push (shorter than typing --force)
 alias push-force='push_upstream --force'
 
 # --- PROXMOX & STORAGE --------------------------------------------------------
+# Proxmox VE and ZFS management aliases
+
+# pct: Proxmox Container Tool with logging
+# -logfile: Write command log to /tmp (useful for debugging)
 alias pct='pct -logfile /tmp/pct-${USER}.log'
+
+# qm: QEMU/KVM Manager with logging
+# -logfile: Write command log to /tmp
 alias qm='qm -logfile /tmp/qm-${USER}.log'
+
+# zfs: ZFS filesystem commands with parseable output
+# -p: Parseable output (exact values, not human-readable)
 alias zfs='zfs -p'
+
+# zpool: ZFS pool commands with megabytes
+# -m: Display sizes in megabytes (easier for scripting)
 alias zpool='zpool -m'
 
 # ------------------------------------------------------------------------------
 # list_zfs_pools
 #
 # Lists ZFS filesystems for first available pool.
+# Useful for quick overview of pool space usage.
 #
 # Returns: 0 success, 1 if no pools found
+#
+# Example output:
+#   AVAIL  USED  USEDSNAP  USEDDS  USEDCHILD  NAME      MOUNTPOINT
+#   465G   128G  5.2G      122G    512M       rpool     /
 # ------------------------------------------------------------------------------
 list_zfs_pools() {
     local pool_name
 
+    # Get name of first ZFS pool
+    # zpool list -H: No headers (machine-readable)
+    # -o name: Only output pool name column
+    # head -1: Take first pool
     pool_name=$(zpool list -H -o name 2>/dev/null | head -1)
 
     if [[ -z "$pool_name" ]]; then
@@ -214,38 +420,72 @@ list_zfs_pools() {
         return 1
     fi
 
+    # List filesystems in pool
+    # zfs list -o space: Show space-related columns (avail, used, etc.)
+    # -r: Recursive (show all datasets in pool)
     zfs list -o space,name,mountpoint -r "$pool_name"
 }
 
 # --- MAINTENANCE & UPDATES (.bashwartung integration) -------------------------
+# System maintenance commands (only if .bashwartung is available)
+
 if [[ -f ~/.bashwartung ]]; then
-    # Daily: Package updates only
+    # Daily maintenance: Package updates only
+    # Runs in sudo subshell, sources .bashwartung, calls df_wartung_run
     alias au='sudo bash -c "source ~/.bashwartung && df_wartung_run"'
-    # Monthly: Updates + ZFS Scrub
+
+    # Monthly maintenance: Full system (updates + ZFS scrub + locate)
+    # --full: Enables ZFS scrub and foreground locate update
     alias au-full='sudo bash -c "source ~/.bashwartung && df_wartung_run --full"'
 fi
 
 # --- MISC & PRODUCTIVITY ------------------------------------------------------
+# Miscellaneous utilities and typo fixes
 
 # ------------------------------------------------------------------------------
 # print_path
 #
 # Pretty-prints the PATH variable in column format.
+# Shows each directory on separate line for easy reading.
 #
 # Returns: None
+#
+# Example output:
+#   /usr/local/bin
+#   /usr/bin
+#   /bin
 # ------------------------------------------------------------------------------
 print_path() {
+    # Save original IFS (Internal Field Separator)
     local IFS_OLD=$IFS
+
+    # Set IFS to newline for splitting
     IFS=$'\n'
+
+    # Replace : with newline, then format as table
+    # ${PATH//:/$'\n'}: Global substitution of : with newline
+    # column -t: Format as table (aligns columns)
     printf '%s\n' "${PATH//:/$'\n'}" | column -t
+
+    # Restore original IFS
     IFS=$IFS_OLD
 }
 
+# f: Quick file find (case-insensitive)
+# Example: f "*.txt" → finds all .txt files
 alias f='find . -iname'
-alias chwon='chown'     # Common typo fix
-alias chmpod='chmod'    # Common typo fix
 
+# Common typo fixes
+alias chwon='chown'     # Typical finger slip: chwon → chown
+alias chmpod='chmod'    # Typical finger slip: chmpod → chmod
+
+# tree: Enhanced directory tree with limits
+# Only create alias if tree is installed
 if command -v tree >/dev/null 2>&1; then
+    # -F: Append / to directories, * to executables, etc.
+    # --dirsfirst: List directories before files
+    # --filelimit 50: Limit files shown per directory (prevents huge output)
+    # --gitignore: Respect .gitignore patterns
     alias tree='tree -F --dirsfirst --filelimit 50 --gitignore'
 fi
 
@@ -254,20 +494,40 @@ fi
 #
 # Displays available framework tools and IP information.
 # Integrates with core framework if available.
+# Provides quick reference for common commands.
 #
 # Returns: None
+#
+# Example output:
+#   Framework Tools v3.6.7
+#
+#   reload       → Reload shell configuration
+#   path         → Show formatted $PATH
+#   myip         → Check local and public IP
+#   dctl         → Dotfiles Management Utility
+#   au           → APT Update (Quick)
+#   au-full      → APT Update + ZFS Scrub (Monthly)
+#
+#   Local IP: 192.168.1.100
 # ------------------------------------------------------------------------------
 tools() {
+    # Get framework version (fallback to 3.6.7 if not set)
     local title="Framework Tools v${DF_PROJECT_VERSION:-3.6.7}"
+
+    # Load colors from framework (fallback to ANSI if not set)
     local color_blue="${DF_C_BLUE:-\033[34m}"
     local color_reset="${DF_C_RESET:-\033[0m}"
 
+    # Print header with version
     printf '%s%s%s\n\n' "$color_blue" "$title" "$color_reset"
 
+    # Print tool list (aligned with printf formatting)
+    # %-12s: Left-aligned string with 12-char width
     printf '  %-12s → %s\n' "reload" "Reload shell configuration"
     printf '  %-12s → %s\n' "path" "Show formatted \$PATH"
     printf '  %-12s → %s\n' "myip" "Check local and public IP"
 
+    # Check if dctl is available (installed or in PATH)
     if [[ -x "/usr/local/bin/dctl" ]] || command -v dctl >/dev/null 2>&1; then
         printf '  %-12s → %s\n' "dctl" "Dotfiles Management Utility"
     else
@@ -279,10 +539,13 @@ tools() {
 
     echo ""
 
-    # Show IP if function available (moved to .bashfunctions)
+    # Show IP address (try function first, fallback to hostname)
     if command -v get_local_ip_address >/dev/null 2>&1; then
+        # Use framework function (from .bashfunctions)
         get_local_ip_address
     elif command -v hostname >/dev/null 2>&1; then
+        # Fallback: Use hostname -I (shows all IPs)
+        # awk '{print $1}': Extract first IP address
         printf 'Local IP: %s\n' "$(hostname -I | awk '{print $1}')"
     fi
 }

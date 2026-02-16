@@ -6,111 +6,780 @@
 # CHANGES:     v3.6.7 - Simplify stty hint, improve organization
 # ------------------------------------------------------------------------------
 
+# ==============================================================================
+# NANO EDITOR CONFIGURATION
+# ==============================================================================
+# Nano is a simple terminal text editor (successor to Pico)
+# This config optimizes it for modern workflows and system administration
+#
+# Features enabled:
+#   - Modern keybindings (Ctrl+S, Ctrl+Q, Ctrl+C/V/X)
+#   - Syntax highlighting (Bash, Proxmox, ZFS)
+#   - Smart indentation and line handling
+#   - Visual enhancements (line numbers, mouse support)
+#
+# Requirements:
+#   - Nano 8.0+ (for modern features like minibar, indicator)
+#   - 256-color terminal (for color theme)
+#   - stty -ixon in .bashrc (for Ctrl+S/Ctrl+Q)
+#
+# Documentation: man nanorc, nano --help
+# ==============================================================================
+
+
 # --- EDITOR CORE BEHAVIOR -----------------------------------------------------
-set autoindent          # Auto-indent new lines
-set tabsize 4           # Tab width (4 spaces)
-set tabstospaces        # Convert tabs to spaces
-set softwrap            # Soft wrap long lines
-set atblanks            # Break lines at whitespace
-set zap                 # Make Backspace/Delete erase selected region
-set noconvert           # Don't convert DOS/Mac file formats
-set locking             # Use vim-style lock files
-set jumpyscrolling      # Scroll by half screen (faster)
-set trimblanks          # Trim trailing whitespace on save
+# Fundamental editing behavior and file handling
+
+# set autoindent
+#   Automatically indent new lines to match previous line's indentation
+#   Example:
+#       if [[ condition ]]; then
+#           command           ← 4 spaces indent
+#           |                 ← Press Enter here
+#           |                 ← New line auto-indented to 4 spaces
+#   Why: Essential for code editing (maintains structure)
+#   Without: Every line starts at column 0 (tedious manual indenting)
+set autoindent
+
+# set tabsize 4
+#   Display width of tab character (how many columns wide)
+#   Default: 8 (too wide for code)
+#   Options: 2 (compact), 4 (readable), 8 (classic)
+#   Why 4:
+#     - Matches framework convention (editorconfig, bash scripts)
+#     - Good balance between compactness and readability
+#     - Industry standard for most languages
+#   Example: Tab character (0x09) appears as 4 spaces wide on screen
+set tabsize 4
+
+# set tabstospaces
+#   Convert tab characters to spaces when typing Tab key
+#   Without: Pressing Tab inserts actual tab character (0x09)
+#   With: Pressing Tab inserts 4 spaces (based on tabsize)
+#   Why convert:
+#     - Consistent appearance across editors (tabs render differently)
+#     - Bash doesn't care (spaces work same as tabs for indentation)
+#     - .editorconfig specifies spaces for bash scripts
+#   Exception: Makefiles REQUIRE tabs (edit with different settings)
+set tabstospaces
+
+# set softwrap
+#   Wrap long lines visually (display only, doesn't insert newlines)
+#   Without: Long lines scroll horizontally (hard to read)
+#   With: Lines wrap at screen edge (easier reading)
+#   Example:
+#     Without softwrap: Very long line goes off screen →→→→→
+#     With softwrap:    Very long line wraps to
+#                       next line visually
+#   Note: Doesn't modify file (no actual newline characters added)
+set softwrap
+
+# set atblanks
+#   When soft-wrapping, break lines at whitespace (not mid-word)
+#   Without: Lines break anywhere (words split across lines)
+#   With: Lines break at spaces (words stay intact)
+#   Example:
+#     Without: This-is-a-long-sen
+#              tence-that-wraps
+#     With:    This-is-a-long-
+#              sentence-that-wraps (breaks at space)
+#   Requires: softwrap enabled (only affects soft-wrapped lines)
+set atblanks
+
+# set zap
+#   Make Backspace/Delete erase marked (selected) text
+#   Without: Backspace/Delete only move cursor in selection
+#   With: Backspace/Delete remove entire selection (like modern editors)
+#   Example:
+#     1. Select text with Shift+Arrow or Ctrl+A
+#     2. Press Backspace → Selected text deleted
+#   Why: Modern editor behavior (VS Code, Notepad++ work this way)
+set zap
+
+# set noconvert
+#   Don't automatically convert DOS (CRLF) or Mac (CR) line endings to Unix (LF)
+#   Without noconvert: Nano converts CRLF → LF on load
+#   With noconvert: Preserves original line endings
+#   Why preserve:
+#     - .gitattributes handles line ending normalization
+#     - Explicit conversion safer than automatic
+#     - Prevents accidental changes to files requiring specific endings
+#   When to convert: Use dos2unix/unix2dos explicitly
+set noconvert
+
+# set locking
+#   Create lock files when editing (prevents concurrent edits)
+#   Lock file: .filename.swp (vim-style locking)
+#   Why: Prevents two users editing same file simultaneously
+#   Example scenario:
+#     User A: nano /etc/config  → Creates /etc/.config.swp
+#     User B: nano /etc/config  → Warning: "File is being edited by..."
+#   Without: Both users edit, last save wins (data loss risk)
+set locking
+
+# set jumpyscrolling
+#   Scroll by half screen height (faster scrolling)
+#   Without: Smooth scrolling (line-by-line, slow for long files)
+#   With: Jump scrolling (half-page at a time, faster navigation)
+#   Example:
+#     File with 1000 lines, cursor at line 500
+#     Press Page Down → Jumps to line 550 (not 501)
+#   Why: Faster navigation in large files (logs, scripts)
+set jumpyscrolling
+
+# set trimblanks
+#   Remove trailing whitespace when saving file
+#   Trailing whitespace: Spaces/tabs at end of line (invisible)
+#   Why remove:
+#     - No functional purpose (invisible, useless)
+#     - Causes noisy git diffs (whitespace-only changes)
+#     - .editorconfig specifies trim_trailing_whitespace=true
+#   Exception: Markdown may use 2 trailing spaces for <br> (disabled in nano)
+#   When trimmed: On save (Ctrl+S or Ctrl+O)
+set trimblanks
+
 
 # --- UI/STATUS BAR ------------------------------------------------------------
-set linenumbers         # Show line numbers
-set constantshow        # Constantly show cursor position
-set indicator           # Show scroll position indicator
-set minibar             # Show info in bottom bar instead of title
-set stateflags          # Show buffer state flags (I/M/R)
-set showcursor          # Show cursor in file browser
-set emptyline           # Show indicator on empty lines
-set mouse               # Enable mouse support
+# Visual enhancements and information display
+
+# set linenumbers
+#   Show line numbers in left margin
+#   Example:
+#       1 #!/bin/bash
+#       2 echo "Hello"
+#       3 exit 0
+#   Why: Essential for debugging (error messages reference line numbers)
+#   Usage: Jump to line with Ctrl+G (goto line)
+set linenumbers
+
+# set constantshow
+#   Always show cursor position in status bar
+#   Displays: Line X/Y  Col Z  (X% of file)
+#   Example: Line 42/128  Col 15  (33%)
+#   Without: Position only shown on certain actions
+#   With: Always visible (helps track location in file)
+set constantshow
+
+# set indicator
+#   Show scroll position indicator on right edge
+#   Visual: ┃ (vertical bar) showing relative position in file
+#   Example:
+#     Top of file:    ┃ at top
+#     Middle of file: ┃ in middle
+#     Bottom of file: ┃ at bottom
+#   Why: Quick visual reference for position in long files
+#   Requires: Nano 8.0+ (older versions don't support)
+set indicator
+
+# set minibar
+#   Show info in bottom bar instead of title bar (more space-efficient)
+#   Without minibar: Title bar shows filename, status bar shows shortcuts
+#   With minibar: Everything in bottom bar, more editing space
+#   Layout with minibar:
+#     ┌────────────────────┐
+#     │ [file content]     │ ← More space for editing
+#     │                    │
+#     └────────────────────┘
+#     │ filename | Ln 1/10 │ ← Compact info bar
+#   Requires: Nano 8.0+ (older versions ignore this)
+set minibar
+
+# set stateflags
+#   Show buffer state indicators in status bar
+#   Flags:
+#     I = Auto-indent enabled
+#     M = Mark (selection) active
+#     R = Recording macro
+#   Example: Line 42/128  Col 15  [I]  (33%)
+#   Why: Visual feedback for editor modes
+set stateflags
+
+# set showcursor
+#   Show cursor in file browser (when using Ctrl+R to read file)
+#   Without: Cursor invisible in browser (harder to navigate)
+#   With: Cursor visible (easier to select file)
+#   When used: Insert file with Ctrl+R, browse with arrows
+set showcursor
+
+# set emptyline
+#   Show indicator on empty lines past end of file
+#   Visual: ~ (tilde) on empty lines
+#   Example:
+#     Line 1: echo "test"
+#     Line 2:
+#     ~       ← Visual indicator (no actual content)
+#     ~
+#   Why: Clear distinction between file content and empty screen space
+#   Inspired by: Vim's empty line indicator
+set emptyline
+
+# set mouse
+#   Enable mouse support (click to position cursor, scroll wheel)
+#   Features:
+#     - Click to move cursor
+#     - Drag to select text
+#     - Scroll wheel to scroll (if terminal supports)
+#     - Click line numbers to select line
+#   Why enable:
+#     - Convenient for quick positioning
+#     - Works in SSH sessions (if terminal supports mouse reporting)
+#   Terminal requirement: Mouse reporting mode (most modern terminals support)
+set mouse
+
 
 # --- SEARCH/HISTORY -----------------------------------------------------------
-set historylog          # Save search/replace history
-set positionlog         # Remember cursor position per file
-set searchagain         # Repeat last search with N
+# Search functionality and history persistence
+
+# set historylog
+#   Save search and replace history between sessions
+#   Saved to: ~/.local/share/nano/search_history
+#   Content: Last N search terms and replacement strings
+#   Why: Convenient to reuse recent searches (up/down arrows in search)
+#   Usage:
+#     1. Press Ctrl+F (search)
+#     2. Press Up Arrow → Previous search term appears
+#     3. Press Down Arrow → Next search term
+#   Without: History lost on exit (must retype searches)
+set historylog
+
+# set positionlog
+#   Remember cursor position for each file between sessions
+#   Saved to: ~/.local/share/nano/positions
+#   Format: /path/to/file line,column
+#   Example: /etc/config 42,15 (cursor at line 42, column 15)
+#   Why: Resume editing where you left off
+#   Usage:
+#     1. Edit file, close at line 100
+#     2. Reopen file → Cursor automatically at line 100
+#   Without: Always opens at line 1 (must navigate to last position)
+set positionlog
+
+# set searchagain
+#   Pressing Alt+W repeats last search (find next)
+#   Without: Must press Ctrl+F, Enter (two steps)
+#   With: Alt+W finds next occurrence (one step)
+#   Keybinding: Alt+W (Meta+W) or Esc W
+#   Usage:
+#     1. Search for "function" (Ctrl+F, type "function", Enter)
+#     2. Press Alt+W → Jump to next occurrence
+#     3. Repeat Alt+W to keep finding
+#   Alternative: Ctrl+F, Enter (searches again for same term)
+set searchagain
+
 
 # --- BACKUP/SAFETY ------------------------------------------------------------
-set backup              # Create backup~ files on save
-set backupdir ~/.nano/backups  # Directory for backup files
-                        # Create with: mkdir -p ~/.nano/backups
+# File backup and data safety features
+
+# set backup
+#   Create backup file when saving (filename~ with tilde)
+#   Example:
+#     Original: /etc/config
+#     Backup: /etc/config~ (previous version before last save)
+#   When created: On save (Ctrl+S or Ctrl+O)
+#   Why: Safety net against accidental changes (one-level undo)
+#   Limitation: Only keeps ONE backup (last saved version)
+#   Alternative: Use version control (git) for complete history
+set backup
+
+# set backupdir ~/.nano/backups
+#   Store backup files in dedicated directory (not alongside originals)
+#   Without backupdir: Backups in same directory as original
+#     /etc/config  → /etc/config~  (clutter)
+#   With backupdir: Backups centralized
+#     /etc/config  → ~/.nano/backups/etc/config~  (organized)
+#
+#   Setup required:
+#     mkdir -p ~/.nano/backups
+#
+#   Directory structure mirrors original paths:
+#     ~/.nano/backups/
+#       └── etc/
+#           └── config~
+#       └── home/
+#           └── user/
+#               └── .bashrc~
+#
+#   Why centralize:
+#     - No clutter in original directories
+#     - Easy to clean all backups (rm -rf ~/.nano/backups/*)
+#     - Easy to find old versions
+set backupdir ~/.nano/backups
+# Create directory: mkdir -p ~/.nano/backups
+
 
 # --- MODERN FEATURES (Nano 8.0+) ----------------------------------------------
-set multibuffer         # Allow editing multiple files
-set boldtext            # Use bold instead of reverse video
-set suspendenable       # Allow Ctrl+Z to suspend
-set smarthome           # Smart home key (first non-whitespace)
-set afterends           # Make Ctrl+Right stop at word ends
+# Advanced features available in recent nano versions
+
+# set multibuffer
+#   Allow editing multiple files simultaneously (tabs)
+#   Usage:
+#     1. Open multiple files: nano file1.sh file2.sh
+#     2. Switch between files: Alt+< (previous) Alt+> (next)
+#   Without: Can only edit one file at a time
+#   With: Multiple files loaded, switch with Alt+< / Alt+>
+#   Status bar shows: file1.sh [2/3] (file 2 of 3)
+#   Why: Convenient for editing related files (config + script)
+set multibuffer
+
+# set boldtext
+#   Use bold text for highlighting instead of reverse video
+#   Without: Syntax highlighting uses reverse video (inverted colors)
+#   With: Syntax highlighting uses bold (better readability)
+#   Example:
+#     Without: function name  (background/foreground swapped)
+#     With: function name  (bold, easier to read)
+#   Terminal requirement: Bold support (most modern terminals)
+set boldtext
+
+# set suspendenable
+#   Allow suspending nano with Ctrl+Z (return to shell)
+#   Usage:
+#     1. Editing file in nano
+#     2. Press Ctrl+Z → Nano suspended, returns to shell
+#     3. Run commands in shell (ls, grep, etc.)
+#     4. Type 'fg' → Resume nano
+#   Why useful:
+#     - Quick shell access without closing file
+#     - Check command syntax, test script, view logs
+#   Without: Must save, quit, run command, reopen (tedious)
+set suspendenable
+
+# set smarthome
+#   Make Home key jump to first non-whitespace character
+#   Without smarthome:
+#     Press Home → Jump to column 0 (start of line)
+#   With smarthome:
+#     Press Home once → Jump to first non-whitespace
+#     Press Home twice → Jump to column 0 (start of line)
+#   Example:
+#         echo "test"  (cursor at end)
+#     Press Home → |echo "test"  (cursor at 'e', not at indent)
+#     Press Home again → |    echo "test"  (cursor at column 0)
+#   Why: IDE behavior (VS Code, IntelliJ work this way)
+set smarthome
+
+# set afterends
+#   Make Ctrl+Right stop at word ends (not beginnings)
+#   Without afterends:
+#     Ctrl+Right: Jump to |word |start (before word)
+#   With afterends:
+#     Ctrl+Right: Jump to word| end| (after word)
+#   Example:
+#     Text: "This is a test"
+#     Without: |This |is |a |test (stops before each word)
+#     With: This| is| a| test| (stops after each word)
+#   Why: More intuitive for deleting/selecting words
+#   Usage: Ctrl+Right to navigate, Ctrl+Delete to delete word
+set afterends
+
 
 # --- SYNTAX HIGHLIGHTING (System + Custom) ------------------------------------
+# Load syntax definitions for various file types
+
+# include "/usr/share/nano/*.nanorc"
+#   Load all system-provided syntax definitions
+#   Location: /usr/share/nano/ (installed by nano package)
+#   Files: sh.nanorc, python.nanorc, html.nanorc, etc.
+#   Why: Pre-configured highlighting for common languages
+#   Available syntaxes (Debian/Ubuntu):
+#     - sh.nanorc: Bash/shell scripts
+#     - python.nanorc: Python
+#     - c.nanorc: C/C++
+#     - html.nanorc: HTML
+#     - yaml.nanorc: YAML
+#     - json.nanorc: JSON
+#     - ... (many more, see /usr/share/nano/)
 include "/usr/share/nano/*.nanorc"
+
+# include "~/.nano/*.nanorc"
+#   Load custom syntax definitions from user directory
+#   Location: ~/.nano/ (user-created)
+#   Purpose: Custom syntax for frameworks, domain-specific languages
+#   Example: ~/.nano/proxmox.nanorc, ~/.nano/zfs.nanorc
+#   Why: System-wide syntaxes don't cover everything
+#   Create directory: mkdir -p ~/.nano/
 include "~/.nano/*.nanorc"
 
+
 # --- PROXMOX/ZFS SYNTAX HIGHLIGHTING ------------------------------------------
+# Custom syntax highlighting for Proxmox VE and ZFS administration
+
+# Proxmox VE syntax (container/VM configs, Proxmox commands)
+# Matches files: *.pve, *.qm, *.pct, *.conf, *.cfg
 syntax "proxmox" "\.(pve|qm|pct|conf|cfg)$"
+
+# Highlight Proxmox CLI commands (blue)
+# Matches: pct, qm, pvesh, pveum, pveam at start of line
+# Example: pct list, qm start 100, pveum user add
 color brightblue "^(pct|qm|pvesh|pveum|pveam).*"
+
+# Highlight VM/CT status fields (green)
+# Matches: vmid: 100, status: running, status: stopped
+# Example config:
+#   vmid: 100
+#   status: running
 color brightgreen "vmid:\s+\d+|status:\s+(running|stopped|paused)"
+
+# Highlight resource specifications (yellow)
+# Matches: memory: 2048, cpu: 2, disk0: local-lvm:vm-100-disk-0
+# Example:
+#   memory: 4096
+#   cpu: 4
+#   net0: virtio=XX:XX:XX:XX:XX:XX,bridge=vmbr0
 color yellow "(memory|cpu|disk|net[0-9]):\s+\S+"
+
+# Highlight node/hostname fields (magenta)
+# Matches: node : pve1, hostname : container1
+# Example:
+#   node : proxmox-01
+#   hostname : webserver
 color brightmagenta "^(node|hostname)\s+:\s+\S+"
+
+# Highlight comments (cyan)
+# Matches: Lines starting with #
+# Example: # Network configuration
 color cyan "^#.*"
 
+
+# ZFS syntax (pool configs, dataset listings)
+# Matches files: *.zfs, *.pool, *.dataset, *.conf, *.log
 syntax "zfs" "\.(zfs|pool|dataset)(\.(conf|log))?$"
+
+# Highlight pool/dataset names (bright cyan)
+# Matches: pool: rpool, dataset: rpool/data
+# Example:
+#   pool: rpool
+#   dataset: rpool/var/log
 color brightcyan "^(pool|dataset):\s+\S+"
+
+# Highlight used space statistics (bright yellow)
+# Matches: USED, USEDSNAP, USEDDS, USEDREFRESERV with size (1.2T, 500G, etc.)
+# Example:
+#   USED       1.5T
+#   USEDSNAP   256G
+#   USEDDS     1.2T
 color brightyellow "\<(USED|USEDSNAP|USEDDS|USEDREFRESERV)\>\s+[0-9.GMTP]+"
+
+# Highlight available space (bright green)
+# Matches: AVAIL 500G
+# Example: AVAIL      2.3T
 color brightgreen "\<AVAIL\>\s+[0-9.GMTP]+"
+
+# Highlight mount points (bright magenta)
+# Matches: MOUNTPOINT /rpool/data, MOUNTPOINT /var/log
+# Example: MOUNTPOINT /rpool/ROOT/debian
 color brightmagenta "MOUNTPOINT\s+/\S*"
+
+# Highlight error states (bright red)
+# Matches: DEGRADED, FAULTED, OFFLINE, UNAVAIL
+# Example: status: DEGRADED (pool has issues)
 color brightred "(DEGRADED|FAULTED|OFFLINE|UNAVAIL)"
+
+# Highlight comments (cyan)
+# Matches: Lines starting with #
 color cyan "^#.*"
+
 
 # --- DOTFILES FRAMEWORK SYNTAX ------------------------------------------------
+# Custom syntax for dotfiles framework scripts and configs
+
+# Matches files: *.sh, .bash*, .nanorc, .dircolors, core.sh, dctl, dotfilesctl.sh
 syntax "dotfiles" "\.(sh|bash.*|nanorc|dircolors|core|dctl|dotfilesctl)$"
+
+# Highlight bash keywords (bright green)
+# Matches: alias, function, export at start of line
+# Example:
+#   alias ll='ls -la'
+#   function backup() { ... }
+#   export PATH="/usr/local/bin:$PATH"
 color brightgreen "^(alias|function|export)\s+"
+
+# Highlight framework function prefixes (bright blue)
+# Matches: df_ or DF_ followed by identifier (function/variable names)
+# Example:
+#   df_log_info "message"
+#   DF_REPO_ROOT="/opt/dotfiles"
 color brightblue "^(df_|DF_)[A-Za-z_]+"
+
+# Highlight framework logging functions (yellow)
+# Matches: df_log_info, df_log_success, df_log_error, df_log_warn
+# Example:
+#   df_log_info "Starting backup..."
+#   df_log_error "Backup failed!"
 color yellow "\<(df_log_info|df_log_success|df_log_error|df_log_warn)\>"
+
+# Highlight section headers (bright magenta)
+# Matches: # --- Section Name ---
+# Example: # --- CONFIGURATION ---
 color brightmagenta "# --- .* ---"
+
+# Highlight framework environment variables (cyan)
+# Matches: DF_REPO_ROOT, DF_PROJECT_VERSION, DF_CORE_LOADED, DF_BACKUP_DIR
+# Example:
+#   echo "$DF_REPO_ROOT"
+#   export DF_PROJECT_VERSION="3.6.7"
 color cyan "(DF_REPO_ROOT|DF_PROJECT_VERSION|DF_CORE_LOADED|DF_BACKUP_DIR)"
+
+# Highlight variable expansions (bright yellow)
+# Matches: $VAR or ${VAR} (bash variable syntax)
+# Example:
+#   echo "$HOME"
+#   echo "${USER}_backup"
 color brightyellow "\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"
+
 
 # ==============================================================================
 # KEY BINDINGS (Modern IDE-like shortcuts)
 # ==============================================================================
-# NOTE: Ctrl+S/Ctrl+Q require 'stty -ixon' (configured in ~/.bashrc)
-#       This disables XON/XOFF flow control for modern editor shortcuts
+# Rebinds keys to match modern editor conventions (VS Code, Sublime, etc.)
+# Traditional nano shortcuts (Ctrl+O save, Ctrl+X quit) still work
+#
+# IMPORTANT: Requires 'stty -ixon' in ~/.bashrc
+#
+# Why stty -ixon?
+#   - By default, terminal uses XON/XOFF flow control
+#   - Ctrl+S = XOFF (pause output) - freezes terminal
+#   - Ctrl+Q = XON (resume output) - unfreezes terminal
+#   - This conflicts with modern editor shortcuts (Ctrl+S = Save)
+#
+# Without stty -ixon:
+#   - Ctrl+S freezes terminal (appears hung)
+#   - Ctrl+Q unfreezes (looks like bug)
+#   - Can't use Ctrl+S for Save
+#
+# With stty -ixon (in ~/.bashrc):
+#   - Disables XON/XOFF flow control
+#   - Frees Ctrl+S and Ctrl+Q for nano keybindings
+#   - Modern editors can use these keys
+#
+# Add to ~/.bashrc:
+#   stty -ixon 2>/dev/null  # Disable XON/XOFF for Ctrl+S/Ctrl+Q
+#
+# Alternative: Use Ctrl+O (traditional nano save) if stty not configured
 # ==============================================================================
 
+
 # --- FILE OPERATIONS ----------------------------------------------------------
-bind ^S savefile main       # Ctrl+S: Save
-bind ^Q exit all            # Ctrl+Q: Quit
-bind ^Z suspend main        # Ctrl+Z: Suspend to shell
+# Save, quit, and suspend commands
+
+# bind ^S savefile main
+#   Ctrl+S: Save file (modern editor standard)
+#   Without: Ctrl+O (WriteOut) is default nano save
+#   With: Ctrl+S saves (like VS Code, Sublime, Notepad++)
+#   Requires: stty -ixon (disables terminal flow control)
+#   Context: main (normal editing mode)
+bind ^S savefile main
+
+# bind ^Q exit all
+#   Ctrl+Q: Quit nano (modern editor standard)
+#   Without: Ctrl+X is default nano quit
+#   With: Ctrl+Q quits (like many GUI editors)
+#   Requires: stty -ixon (disables terminal flow control)
+#   Context: all (works in all modes: main, search, help, etc.)
+#   Behavior: Prompts to save if unsaved changes
+bind ^Q exit all
+
+# bind ^Z suspend main
+#   Ctrl+Z: Suspend nano and return to shell
+#   Function: Sends nano to background (SIGTSTP signal)
+#   Usage:
+#     1. Press Ctrl+Z → Returns to shell
+#     2. Run commands (ls, grep, test script, etc.)
+#     3. Type 'fg' → Resume nano
+#   Alternative: Built-in suspend (may vary by nano version)
+#   Context: main (normal editing mode)
+bind ^Z suspend main
+
 
 # --- CLIPBOARD OPERATIONS -----------------------------------------------------
-bind ^C copy main           # Ctrl+C: Copy selection
-bind ^V paste main          # Ctrl+V: Paste
-bind ^X cut main            # Ctrl+X: Cut selection
+# Copy, cut, and paste commands (modern editor style)
+
+# bind ^C copy main
+#   Ctrl+C: Copy selected text (modern standard)
+#   Without: Alt+6 (Meta-6) is default nano copy
+#   With: Ctrl+C copies (like all modern editors)
+#   Requires: Text selected first (Ctrl+A or Shift+Arrow to mark)
+#   Context: main (normal editing mode)
+#   Clipboard: Internal nano clipboard (not system clipboard)
+bind ^C copy main
+
+# bind ^V paste main
+#   Ctrl+V: Paste from clipboard (modern standard)
+#   Without: Ctrl+U is default nano paste
+#   With: Ctrl+V pastes (like all modern editors)
+#   Context: main (normal editing mode)
+#   Clipboard: Pastes from nano's internal clipboard
+#   Note: Terminal clipboard (Ctrl+Shift+V) is separate
+bind ^V paste main
+
+# bind ^X cut main
+#   Ctrl+X: Cut selected text (modern standard)
+#   Without: Ctrl+K cuts entire line (different behavior!)
+#   With: Ctrl+X cuts selection (like modern editors)
+#   Behavior:
+#     - If text selected: Cuts selection
+#     - If no selection: No action (unlike Ctrl+K which cuts line)
+#   Context: main (normal editing mode)
+bind ^X cut main
+
 
 # --- EDIT OPERATIONS ----------------------------------------------------------
-bind ^Y redo main           # Ctrl+Y: Redo
-bind ^A mark main           # Ctrl+A: Start selection (mark)
+# Undo, redo, and selection commands
+
+# bind ^Y redo main
+#   Ctrl+Y: Redo (undo the undo)
+#   Without: Alt+E (Meta-E) is default nano redo
+#   With: Ctrl+Y redoes (Windows convention)
+#   Sequence:
+#     1. Make change → "Hello"
+#     2. Undo (Alt+U) → Reverts to ""
+#     3. Redo (Ctrl+Y) → Restores to "Hello"
+#   Note: Ctrl+Z is often Redo in Linux (but we use it for Suspend)
+#   Context: main (normal editing mode)
+bind ^Y redo main
+
+# bind ^A mark main
+#   Ctrl+A: Start text selection (set mark)
+#   Without: Ctrl+6 or Alt+A is default nano mark
+#   With: Ctrl+A marks (similar to "Select All" but different behavior)
+#   Behavior:
+#     1. Press Ctrl+A → Sets mark at cursor
+#     2. Move cursor (arrows, Ctrl+Right, etc.) → Selects text
+#     3. Press Ctrl+C/X → Copy/cut selection
+#   Note: NOT "Select All" (unlike most GUI editors)
+#   Context: main (normal editing mode)
+bind ^A mark main
+
 
 # --- SEARCH/NAVIGATION --------------------------------------------------------
-bind ^F whereis all         # Ctrl+F: Find/Search
-bind ^R replace main        # Ctrl+R: Find and Replace
-bind ^G gotoline main       # Ctrl+G: Go to line number
+# Find, replace, and go-to-line commands
+
+# bind ^F whereis all
+#   Ctrl+F: Find/Search (modern standard)
+#   Without: Ctrl+W is default nano search (old convention)
+#   With: Ctrl+F searches (like all modern applications)
+#   Usage:
+#     1. Press Ctrl+F → Prompt: "Search:"
+#     2. Type search term → Press Enter
+#     3. Cursor jumps to first match
+#     4. Press Alt+W or Ctrl+F,Enter → Find next
+#   Context: all (works in all modes)
+#   Case sensitivity: Toggle with Alt+C during search
+bind ^F whereis all
+
+# bind ^R replace main
+#   Ctrl+R: Find and Replace (modern standard)
+#   Without: Alt+R is default nano replace
+#   With: Ctrl+R replaces (like many GUI editors)
+#   Usage:
+#     1. Press Ctrl+R → Prompt: "Search (to replace):"
+#     2. Type search term → Press Enter
+#     3. Prompt: "Replace with:"
+#     4. Type replacement → Press Enter
+#     5. For each match: Y (yes), N (no), A (all)
+#   Context: main (normal editing mode)
+bind ^R replace main
+
+# bind ^G gotoline main
+#   Ctrl+G: Go to line number (common IDE shortcut)
+#   Without: Alt+G is default nano goto
+#   With: Ctrl+G jumps (like VS Code, IntelliJ)
+#   Usage:
+#     1. Press Ctrl+G → Prompt: "Enter line number:"
+#     2. Type line number → Press Enter
+#     3. Cursor jumps to that line
+#   Example: Ctrl+G, type "42", Enter → Jump to line 42
+#   Context: main (normal editing mode)
+bind ^G gotoline main
+
 
 # --- EXTERNAL TOOLS -----------------------------------------------------------
-# ShellCheck integration for shell scripts (requires: apt install shellcheck)
-# Uncomment to enable Ctrl+T for syntax checking:
+# Integration with external commands (linters, formatters)
+
+# ShellCheck integration (optional)
+#   Syntax check for shell scripts
+#   Requires: apt install shellcheck
+#   Usage:
+#     1. Edit shell script in nano
+#     2. Press Ctrl+T → Runs shellcheck on current file
+#     3. Output shows warnings/errors
+#
+# Command breakdown:
+#   shellcheck: Shell script linter
+#   -f gcc: Output format (file:line:col: message)
+#   -x: Follow source statements (check sourced files)
+#   $FILENAME: Current file being edited
+#   2>&1: Redirect stderr to stdout (show errors)
+#   | head -20: Limit to first 20 warnings (avoid screen flood)
+#
+# Example output:
+#   script.sh:15:1: warning: Use $(..) instead of legacy `..` [SC2006]
+#   script.sh:23:5: error: Unquoted variable [SC2086]
+#
+# Uncomment to enable:
 # bind ^T execute "shellcheck -f gcc -x $FILENAME 2>&1 | head -20" main
 
+
 # --- COLOR THEME (256-Color Terminal Optimized) -------------------------------
-set titlecolor brightwhite,blue         # Title bar (filename, modified)
-set statuscolor black,cyan              # Status bar (bottom shortcuts)
-set keycolor brightwhite,blue           # Key combo help
-set numbercolor brightyellow            # Line numbers
-set errorcolor brightwhite,red          # Error messages
-set spotlightcolor black,brightyellow   # Search match highlighting
-set selectedcolor black,brightwhite     # Selected text
-set scrollercolor brightcyan            # Scroll bar indicator
+# Visual appearance and syntax highlighting colors
+# Requires: 256-color terminal (echo $TERM → xterm-256color or screen-256color)
+
+# set titlecolor brightwhite,blue
+#   Title bar colors (top bar showing filename and status)
+#   Format: foreground,background
+#   Example: "  GNU nano 8.4        ~/.bashrc        Modified  "
+#   brightwhite: Filename text (easy to read)
+#   blue: Background (professional, not distracting)
+set titlecolor brightwhite,blue
+
+# set statuscolor black,cyan
+#   Status bar colors (bottom bar showing shortcuts)
+#   Example: "^G Help  ^O Write Out  ^W Where Is  ^K Cut  ^T Execute"
+#   black: Shortcut text (high contrast)
+#   cyan: Background (stands out, matches theme)
+set statuscolor black,cyan
+
+# set keycolor brightwhite,blue
+#   Key combo help colors (in help screen, Ctrl+G)
+#   Example: "^S  Save file"
+#   brightwhite: Key combo (^S)
+#   blue: Background (matches title bar)
+set keycolor brightwhite,blue
+
+# set numbercolor brightyellow
+#   Line number colors (left margin)
+#   Example:
+#       1 #!/bin/bash
+#       2 echo "test"
+#   brightyellow: High visibility, doesn't clash with syntax colors
+#   Why not white: Would blend with some text
+#   Why not blue: Would blend with keywords
+set numbercolor brightyellow
+
+# set errorcolor brightwhite,red
+#   Error message colors (shown when issues occur)
+#   Example: "Error: File not found"
+#   brightwhite: Message text (readable)
+#   red: Background (urgent, attention-grabbing)
+set errorcolor brightwhite,red
+
+# set spotlightcolor black,brightyellow
+#   Search match highlighting (found text during search)
+#   Example: Searching for "function" highlights all occurrences
+#   black: Text color (high contrast)
+#   brightyellow: Background (easy to spot, doesn't hurt eyes)
+set spotlightcolor black,brightyellow
+
+# set selectedcolor black,brightwhite
+#   Selected text colors (marked region with Ctrl+A)
+#   Example: Selected text appears inverted
+#   black: Text color
+#   brightwhite: Background (clearly visible selection)
+set selectedcolor black,brightwhite
+
+# set scrollercolor brightcyan
+#   Scroll bar indicator color (right edge, shows position)
+#   Example: ┃ (vertical bar on right side)
+#   brightcyan: Visible but not distracting
+#   Requires: set indicator (scroll position indicator enabled)
+set scrollercolor brightcyan

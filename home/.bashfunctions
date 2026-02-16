@@ -7,11 +7,11 @@
 # CHANGES:     v3.6.7 - Add compression formats, extract cd warning, doc improvements
 # ------------------------------------------------------------------------------
 
-# ShellCheck configuration
+# ShellCheck configuration (ignore missing source file, allow unused variables)
 # shellcheck source=/dev/null disable=SC2034
 
 # --- IDEMPOTENCY GUARD --------------------------------------------------------
-# Prevents multiple loading of this file
+# Prevents multiple loading of this file (sourced by .bashrc)
 [[ -n "${DF_BASHFUNCTIONS_LOADED:-}" ]] && return 0
 readonly DF_BASHFUNCTIONS_LOADED=1
 
@@ -20,18 +20,26 @@ readonly DF_BASHFUNCTIONS_LOADED=1
 # ==============================================================================
 # Rationale:
 # - This file is sourced by interactive shells (.bashrc)
-# - 'set -e' would terminate the shell on any function error
+# - 'set -e' would terminate the entire shell on any function error
 # - Interactive shells must remain resilient to command failures
+# - Users expect to continue working after a failed command
 # - Individual functions implement explicit error handling instead
+#
+# Example problem with 'set -e':
+#   $ ff nonexistent  # find_file returns 1
+#   [Shell would exit here - unacceptable for interactive use]
+#
+# Solution: Each function handles errors gracefully with return codes
 # ==============================================================================
 
 # --- BOOTSTRAP (LOGGING & UI) -------------------------------------------------
 # Provides fallback colored logging functions if core framework is missing
+# Allows standalone execution without full dotfiles framework
 if ! command -v df_log_error >/dev/null 2>&1; then
-    df_log_error()   { printf '\033[31m[ERR]\033[0m %s\n' "$*" >&2; }
-    df_log_success() { printf '\033[32m[OK]\033[0m %s\n' "$*"; }
-    df_log_info()    { printf '\033[34m-->\033[0m %s\n' "$*"; }
-    df_log_warn()    { printf '\033[33m[!]\033[0m %s\n' "$*"; }
+    df_log_error()   { printf '\033[31m[ERR]\033[0m %s\n' "$*" >&2; }  # Red to stderr
+    df_log_success() { printf '\033[32m[OK]\033[0m %s\n' "$*"; }       # Green
+    df_log_info()    { printf '\033[34m-->\033[0m %s\n' "$*"; }        # Blue
+    df_log_warn()    { printf '\033[33m[!]\033[0m %s\n' "$*"; }        # Yellow
 fi
 
 # --- ARCHIVING & EXTRACTION ---------------------------------------------------
@@ -40,11 +48,15 @@ fi
 # compress_file
 #
 # Compresses files/folders with tar to specified archive format.
-# Supports: xz (default, best compression), gz (fast), bz2 (good), zst (fastest)
+# Supports multiple compression algorithms with different tradeoffs:
+#   - xz:   Best compression ratio, slowest (default)
+#   - gz:   Fast compression, moderate ratio
+#   - bz2:  Good compression, moderate speed
+#   - zst:  Fastest compression, good ratio (modern)
 #
 # Parameters:
-#   $1 - Target archive name (without extension)
-#   $2 - Source path to compress
+#   $1 - Target archive name (without extension, added automatically)
+#   $2 - Source path to compress (file or directory)
 #   $3 - Format (optional: xz|gz|bz2|zst, default: xz)
 #
 # Returns: 0 success, 1 failure
@@ -58,35 +70,37 @@ fi
 compress_file() {
     local target_name="${1:?Usage: compress_file <target_name> <source_path> [format]}"
     local source_path="${2:?Usage: compress_file <target_name> <source_path> [format]}"
-    local format="${3:-xz}"
+    local format="${3:-xz}"  # Default to xz (best compression)
     local target_path
     local tar_opts
     local compression_tool
 
-    # Validate source exists
+    # Validate source exists (file or directory)
     if [[ ! -e "$source_path" ]]; then
         df_log_error "Source does not exist: $source_path"
         return 1
     fi
 
     # Determine tar options and extension based on format
+    # ${format,,}: Lowercase conversion for case-insensitive matching
     case "${format,,}" in
         xz)
-            tar_opts="-cJf"
+            tar_opts="-cJf"  # -c: create, -J: xz compression, -f: file
             target_path="${target_name}.tar.xz"
             compression_tool="xz"
             ;;
         gz|gzip)
-            tar_opts="-czf"
+            tar_opts="-czf"  # -c: create, -z: gzip compression, -f: file
             target_path="${target_name}.tar.gz"
             compression_tool="gzip"
             ;;
         bz2|bzip2)
-            tar_opts="-cjf"
+            tar_opts="-cjf"  # -c: create, -j: bzip2 compression, -f: file
             target_path="${target_name}.tar.bz2"
             compression_tool="bzip2"
             ;;
         zst|zstd)
+            # zstd: Modern compression (fast + good ratio)
             tar_opts="--use-compress-program=zstd -cf"
             target_path="${target_name}.tar.zst"
             compression_tool="zstd"
@@ -97,15 +111,19 @@ compress_file() {
             ;;
     esac
 
-    # Check if compression tool is available
+    # Check if compression tool is installed
     if ! command -v "$compression_tool" >/dev/null 2>&1; then
         df_log_error "$compression_tool not installed (apt install $compression_tool)"
         return 1
     fi
 
-    # Compress with verbose output
+    # Compress with progress feedback
     df_log_info "Compressing with $format..."
+
+    # Word splitting intentional for tar_opts (contains multiple flags)
+    # shellcheck disable=SC2086
     if tar $tar_opts "$target_path" -- "$source_path"; then
+        # Show human-readable file size
         local file_size
         file_size=$(du -h "$target_path" 2>/dev/null | cut -f1)
         df_log_success "Compressed: $source_path → $target_path ($file_size)"
@@ -119,8 +137,18 @@ compress_file() {
 # ------------------------------------------------------------------------------
 # extract_archive
 #
-# Universal archive extractor supporting tar.gz, tar.bz2, tar.xz, tar.zst,
-# zip, 7z, rar, gz, bz2, xz. Auto-detects format by extension.
+# Universal archive extractor supporting multiple formats.
+# Auto-detects format by file extension (case-insensitive).
+#
+# Supported formats:
+#   - tar.gz, tgz     - gzip compressed tar
+#   - tar.bz2, tbz2   - bzip2 compressed tar
+#   - tar.xz, txz     - xz compressed tar
+#   - tar.zst         - zstd compressed tar
+#   - zip             - ZIP archives
+#   - 7z              - 7-Zip archives
+#   - rar             - RAR archives
+#   - gz, bz2, xz     - Single compressed files
 #
 # Parameters:
 #   $1 - Archive file path
@@ -128,57 +156,74 @@ compress_file() {
 # Returns: 0 success, 1 failure
 #
 # Side Effects:
-#   - Changes working directory to extracted folder if created
-#   - Displays warning before directory change
+#   - For zip/7z: Creates directory and changes into it
+#   - Shows warning before directory change
+#   - Preserves original archive with -k flag (gz/bz2/xz)
 #
 # Examples:
 #   extract_archive backup.tar.xz   # Extracts and enters backup/
 #   extract_archive data.zip        # Extracts and enters data/
+#   extract_archive file.gz         # Extracts to file (keeps .gz)
 # ------------------------------------------------------------------------------
 extract_archive() {
     local file_path="${1:?Usage: extract_archive <file_path>}"
     local output_dir
     local will_change_dir=false
 
+    # Verify file exists
     if [[ ! -f "$file_path" ]]; then
         df_log_error "File not found: $file_path"
         return 1
     fi
 
     # Determine output directory based on archive type
+    # Remove single extension first
     output_dir="${file_path%.*}"
+
+    # For tar.* archives, remove double extension
     if [[ "$file_path" =~ \.tar\..* ]]; then
         output_dir="${file_path%.tar.*}"
     fi
 
     # Check if we'll create a new directory (for zip/7z)
+    # ${file_path,,}: Lowercase conversion for case-insensitive matching
     case "${file_path,,}" in
         *.zip|*.7z)
             will_change_dir=true
             ;;
     esac
 
-    # Extract based on file extension
+    # Extract based on file extension (case-insensitive)
     case "${file_path,,}" in
         *.tar.bz2|*.tbz2|*.tbz)
+            # x: extract, j: bzip2 decompression, f: file
             tar xjf "$file_path" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.tar.gz|*.tgz)
+            # x: extract, z: gzip decompression, f: file
             tar xzf "$file_path" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.tar.xz|*.txz)
+            # x: extract, J: xz decompression, f: file
             tar xJf "$file_path" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.tar.zst)
+            # Use zstd decompressor (modern format)
             tar --use-compress-program=unzstd -xf "$file_path" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.zip)
+            # -q: quiet, -d: destination directory
             unzip -q "$file_path" -d "${output_dir}" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.7z)
+            # x: extract with full paths, -o: output directory
             7z x "$file_path" -o"${output_dir}" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.rar)
+            # x: extract with full paths
             unrar x "$file_path" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.gz)
+            # -k: keep original (don't delete .gz file)
             gunzip -k "$file_path" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.bz2)
+            # -k: keep original
             bunzip2 -k "$file_path" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *.xz)
+            # -k: keep original
             unxz -k "$file_path" || { df_log_error "Extraction failed: $file_path"; return 1; } ;;
         *)
             df_log_error "Format not supported: $file_path"
@@ -187,7 +232,8 @@ extract_archive() {
 
     df_log_success "Extracted: $file_path"
 
-    # Automatically change to new directory if created (with warning)
+    # Automatically change to new directory if created
+    # -d: directory exists, -w: directory is writable
     if [[ -d "$output_dir" && -w "$output_dir" ]]; then
         df_log_info "Changing directory to: $output_dir"
         if cd "$output_dir"; then
@@ -205,28 +251,37 @@ extract_archive() {
 # history_search
 #
 # Searches command history efficiently for a given search term.
-# Shows max 20 matches.
+# Shows max 20 matches with line numbers.
+# Uses case-sensitive substring matching.
 #
 # Parameters:
-#   $1 - Search term
-# Returns: 0 success, 1 if no term provided
+#   $1 - Search term (substring to search for)
+# Returns: 0 success, 1 if no term provided or no matches
+#
+# Examples:
+#   history_search git      # Find all git commands
+#   history_search "cd /opt" # Find directory changes
 # ------------------------------------------------------------------------------
 history_search() {
     local search_term="${1:?Usage: hg <term>}"
-    local -a history_lines
-    local -i i=0
+    local -a history_lines  # Array of history entries
+    local -i i=0            # Match counter (integer)
     local line
 
+    # Load history into array (cut -c 8- removes line numbers from history output)
     mapfile -t history_lines < <(history | cut -c 8-)
 
+    # Search for matches
     for line in "${history_lines[@]}"; do
+        # Substring matching (case-sensitive)
         if [[ "$line" == *"$search_term"* ]]; then
             ((i++))
-            printf "%3d %s\n" "$i" "$line"
-            [[ "$i" -eq 20 ]] && break
+            printf "%3d %s\n" "$i" "$line"  # Right-aligned 3-digit number
+            [[ "$i" -eq 20 ]] && break      # Limit to 20 results
         fi
     done
 
+    # Report if no matches found
     if [[ $i -eq 0 ]]; then
         df_log_warn "No matches found for: $search_term"
         return 1
@@ -236,16 +291,30 @@ history_search() {
 # ------------------------------------------------------------------------------
 # find_file
 #
-# Fast file search (max 4 levels deep, excluding hidden and node_modules).
-# Returns up to 20 matches.
+# Fast file search with smart filtering.
+# Limits search depth to 4 levels for performance.
+# Excludes hidden files and node_modules directory.
+# Returns up to 20 matches (prevents output flood).
 #
 # Parameters:
-#   $1 - File name (partial match)
+#   $1 - File name (partial match, case-insensitive)
 # Returns: 0 success, 1 if no term provided
+#
+# Examples:
+#   find_file bashrc        # Find all bashrc files
+#   find_file "*.sh"        # Find all shell scripts
 # ------------------------------------------------------------------------------
 find_file() {
     local file_name="${1:?Usage: ff <name>}"
 
+    # find options explained:
+    # -maxdepth 4: Search only 4 levels deep (performance)
+    # -type f: Files only (no directories)
+    # -iname: Case-insensitive name match
+    # -not -path '*/\.*': Exclude hidden files/directories
+    # -not -path '*/node_modules/*': Exclude node_modules
+    # 2>/dev/null: Suppress permission denied errors
+    # head -20: Limit output to 20 results
     find . -maxdepth 4 -type f -iname "*$file_name*" \
         -not -path '*/\.*' \
         -not -path '*/node_modules/*' \
@@ -255,17 +324,31 @@ find_file() {
 # ------------------------------------------------------------------------------
 # find_text
 #
-# Searches file contents recursively with grep (excludes common directories).
+# Searches file contents recursively with grep.
+# Excludes common directories (build artifacts, version control).
+# Shows colored output with line numbers and file names.
 #
 # Parameters:
-#   $1 - Search term
-#   $2 - File mask (optional, default: *)
+#   $1 - Search term (supports regex)
+#   $2 - File mask (optional, default: *, e.g., "*.py" for Python files)
 # Returns: 0 on matches, 1 otherwise
+#
+# Examples:
+#   find_text "function"     # Find in all files
+#   find_text "TODO" "*.sh"  # Find in shell scripts only
 # ------------------------------------------------------------------------------
 find_text() {
     local search_term="${1:?Usage: ft <text> [mask]}"
-    local search_mask="${2:-*}"
+    local search_mask="${2:-*}"  # Default to all files
 
+    # grep options explained:
+    # -r: Recursive search
+    # -n: Show line numbers
+    # -I: Skip binary files
+    # --color=always: Colored output
+    # --exclude-dir: Skip directories (build artifacts, cache, venv)
+    # --include: Only search files matching mask
+    # --: End of options (treats search_term as literal, not option)
     grep -rnI --color=always \
         --exclude-dir={.git,node_modules,build,dist,.venv,__pycache__} \
         --include="*$search_mask*" \
@@ -278,6 +361,7 @@ find_text() {
 # show_aliases
 #
 # Lists all active aliases in tabular format with count.
+# Formats output as columns for better readability.
 #
 # Parameters: None
 # Returns: None
@@ -287,13 +371,17 @@ show_aliases() {
     alias_count=$(alias | wc -l)
 
     printf "Active Aliases (%d):\n" "$alias_count"
+
+    # sed: Remove 'alias ' prefix
+    # column: Format as table (-t: table, -s'=': separator)
     alias | sed 's/^alias //' | column -t -s'='
 }
 
 # ------------------------------------------------------------------------------
 # show_user_functions
 #
-# Lists loaded user functions (filters internal df_ and _ prefixed functions).
+# Lists loaded user functions in columns.
+# Filters internal functions (df_* prefix) and bash internals (_* prefix).
 #
 # Parameters: None
 # Returns: None
@@ -301,10 +389,16 @@ show_aliases() {
 show_user_functions() {
     local func_count
 
-    # shellcheck disable=SC2126  # grep -v (inverted) requires wc -l for counting non-matches
+    # declare -F: List function names only
+    # awk '{print $NF}': Extract last field (function name)
+    # grep -vE: Invert match (exclude patterns)
+    # ^(_|df_): Exclude functions starting with _ or df_
+    # shellcheck disable=SC2126  # grep -v with wc -l is intentional (counting non-matches)
     func_count=$(declare -F | awk '{print $NF}' | grep -vE '^(_|df_)' | wc -l)
 
     printf "User Functions (%d):\n" "$func_count"
+
+    # column -c 80: Format in 80-character width columns
     declare -F | awk '{print $NF}' | grep -vE '^(_|df_)' | sort | column -c 80
 }
 
@@ -313,15 +407,22 @@ show_user_functions() {
 # ------------------------------------------------------------------------------
 # create_directory_and_enter
 #
-# Creates directory (with parents) and immediately changes into it.
+# Creates directory (with parent directories) and immediately changes into it.
+# Useful shortcut for common workflow.
 #
 # Parameters:
-#   $1 - Target directory path
+#   $1 - Target directory path (supports nested paths)
 # Returns: 0 success, 1 failure
+#
+# Examples:
+#   create_directory_and_enter /tmp/project/src  # Creates nested dirs
+#   mkcd test                                     # Creates and enters test/
 # ------------------------------------------------------------------------------
 create_directory_and_enter() {
     local target_directory="${1:?Usage: mkcd <directory>}"
 
+    # mkdir -p: Create parent directories as needed
+    # &&: Only cd if mkdir succeeds (short-circuit evaluation)
     if mkdir -p "$target_directory" && cd "$target_directory"; then
         df_log_success "Created and entered: $target_directory"
     else
@@ -333,25 +434,47 @@ create_directory_and_enter() {
 # ------------------------------------------------------------------------------
 # list_directory_tree
 #
-# Displays directory tree structure (uses tree if available, falls back to find).
-# Limits output to 40 lines, excludes .git, node_modules, .DS_Store, backup.
+# Displays directory tree structure with smart fallback.
+# Prefers 'tree' command for better visualization.
+# Falls back to find if tree is not installed.
+#
+# Exclusions: .git, node_modules, .DS_Store, backup directories
 #
 # Parameters:
-#   $1 - Target directory (optional, default: current)
+#   $1 - Target directory (optional, default: current directory)
 # Returns: None
+#
+# Examples:
+#   list_directory_tree           # Show current directory
+#   list_directory_tree /opt      # Show /opt structure
 # ------------------------------------------------------------------------------
 list_directory_tree() {
-    local target_directory="${1:-.}"
+    local target_directory="${1:-.}"  # Default to current directory
 
+    # Validate directory exists
     if [[ ! -d "$target_directory" ]]; then
         df_log_error "Directory not found: $target_directory"
         return 1
     fi
 
+    # Use tree if available (better visualization)
     if command -v tree >/dev/null 2>&1; then
+        # tree options:
+        # -a: Show all files (including hidden)
+        # -C: Colored output
+        # -I: Ignore patterns (exclusions)
+        # --dirsfirst: List directories before files
+        # head -n 40: Limit output to 40 lines
         tree -aC -I '.git|node_modules|.DS_Store|backup' --dirsfirst "$target_directory" | head -n 40
     else
+        # Fallback: Use find with formatted output
         df_log_warn "tree not installed, using fallback"
+
+        # find options:
+        # -maxdepth 2: Only 2 levels deep
+        # -not -path '*/\.*': Exclude hidden files
+        # sed: Remove leading ./
+        # column -t: Format as table
         find "$target_directory" -maxdepth 2 -not -path '*/\.*' -print 2>/dev/null | sed 's|^./||' | column -t
     fi
 }
@@ -361,8 +484,9 @@ list_directory_tree() {
 # ------------------------------------------------------------------------------
 # get_public_ip
 #
-# Shows public IP address with timeout protection (3s max).
-# Tries ipify.org first, falls back to ifconfig.me.
+# Shows public IP address with timeout protection.
+# Tries multiple services for reliability (ipify.org, ifconfig.me).
+# Implements timeout to prevent hanging on slow/offline connections.
 #
 # Parameters: None
 # Returns: None
@@ -370,6 +494,11 @@ list_directory_tree() {
 get_public_ip() {
     local public_ip
 
+    # curl options:
+    # -s: Silent (no progress bar)
+    # --connect-timeout 2: Max 2 seconds to establish connection
+    # --max-time 3: Max 3 seconds total for request
+    # ||: Fallback to second service if first fails
     public_ip="$(curl -s --connect-timeout 2 --max-time 3 "https://api.ipify.org" 2>/dev/null || \
                  curl -s --connect-timeout 2 --max-time 3 "https://ifconfig.me" 2>/dev/null)"
 
@@ -383,7 +512,8 @@ get_public_ip() {
 # ------------------------------------------------------------------------------
 # get_local_ip_address
 #
-# Shows local IP address of the system (all interfaces).
+# Shows local IP address of the system (all network interfaces).
+# Displays multiple IPs if multiple interfaces are active.
 #
 # Parameters: None
 # Returns: None
@@ -391,6 +521,7 @@ get_public_ip() {
 get_local_ip_address() {
     local local_ip_address
 
+    # hostname -I: Show all IP addresses (space-separated)
     local_ip_address="$(hostname -I 2>/dev/null)"
 
     if [[ -n "$local_ip_address" ]]; then
@@ -403,21 +534,30 @@ get_local_ip_address() {
 # ------------------------------------------------------------------------------
 # get_my_ip
 #
-# Returns primary local IP address as string.
+# Returns primary local IP address as string (first interface only).
 # Prefers framework function if available.
+# Suitable for scripting (single IP, no labels).
 #
 # Parameters: None
-# Returns: IP address string (first interface)
+# Returns: IP address string (stdout)
+#
+# Examples:
+#   MY_IP=$(get_my_ip)  # Store in variable
+#   ssh root@$(get_my_ip)  # Use in command
 # ------------------------------------------------------------------------------
 get_my_ip() {
     local ip_address
 
+    # Try framework function first (more robust)
     if command -v df_myip >/dev/null 2>&1; then
         ip_address="$(df_myip)"
     else
+        # Fallback: Get first IP from hostname -I
+        # awk '{print $1}': Extract first field (first IP)
         ip_address="$(hostname -I 2>/dev/null | awk '{print $1}')"
     fi
 
+    # Return IP or "unknown" if failed
     printf '%s\n' "${ip_address:-unknown}"
 }
 
@@ -425,19 +565,31 @@ get_my_ip() {
 # check_port_in_use
 #
 # Checks if a given port is currently in use (TCP/UDP).
+# Shows which process is using the port if occupied.
 #
 # Parameters:
-#   $1 - Port number
+#   $1 - Port number (1-65535)
 # Returns: 0 if in use, 1 if free
+#
+# Examples:
+#   check_port_in_use 80     # Check if web server running
+#   check_port_in_use 22     # Check if SSH running
 # ------------------------------------------------------------------------------
 check_port_in_use() {
     local port_number="${1:?Usage: check_port_in_use <number>}"
 
+    # Validate port number (must be numeric)
     if ! [[ "$port_number" =~ ^[0-9]+$ ]]; then
         df_log_error "Invalid port number: $port_number"
         return 1
     fi
 
+    # ss: Socket statistics (modern replacement for netstat)
+    # -t: TCP sockets
+    # -u: UDP sockets
+    # -l: Listening sockets
+    # -p: Show process using socket
+    # -n: Numeric addresses (no DNS resolution)
     if ss -tulpn 2>/dev/null | grep -q ":$port_number"; then
         df_log_info "Port $port_number is in use:"
         ss -tulpn 2>/dev/null | grep ":$port_number"
@@ -453,22 +605,32 @@ check_port_in_use() {
 # ------------------------------------------------------------------------------
 # get_pve_node_status
 #
-# Displays PVE node status overview (optimized with jq if available).
-# Shows node name, status, CPU%, and RAM usage.
+# Displays Proxmox VE node status overview.
+# Shows node name, status, CPU%, and RAM usage in GB.
+# Uses jq for formatted output if available (falls back to raw JSON).
 #
 # Parameters: None
-# Returns: 0 success, 1 if pvesh not found
+# Returns: 0 success, 1 if pvesh not found (not a Proxmox host)
+#
+# Example output:
+#   Node: pve1 | Status: online | CPU: 45% | RAM: 24GB
 # ------------------------------------------------------------------------------
 get_pve_node_status() {
-    local pvesh_command="pvesh"
-    local jq_command="jq"
+    local pvesh_command="pvesh"  # Proxmox CLI tool
+    local jq_command="jq"        # JSON parser
     local nodes_status
 
+    # Check if Proxmox CLI is available
     if ! command -v "$pvesh_command" >/dev/null 2>&1; then
         df_log_error "Proxmox CLI (${pvesh_command}) not found"
         return 1
     fi
 
+    # Query cluster resources (node type only)
+    # pvesh get: Execute API GET request
+    # /cluster/resources: API endpoint for resource list
+    # --type node: Filter to node resources only
+    # --output-format json: Return JSON instead of table
     nodes_status="$($pvesh_command get /cluster/resources --type node --output-format json 2>/dev/null)"
 
     if [[ -z "$nodes_status" ]]; then
@@ -476,9 +638,16 @@ get_pve_node_status() {
         return 1
     fi
 
+    # Use jq for pretty formatting if available
     if command -v "$jq_command" >/dev/null 2>&1; then
+        # jq -r: Raw output (no JSON quotes)
+        # .data[]: Iterate over data array
+        # \(...): String interpolation in jq
+        # (.cpu*100|round): Convert 0.45 to 45%
+        # (.mem/1024/1024/1024|round): Convert bytes to GB
         echo "$nodes_status" | "$jq_command" -r '.data[] | "Node: \(.node) | Status: \(.status) | CPU: \((.cpu*100|round))% | RAM: \((.mem/1024/1024/1024|round))GB"'
     else
+        # Fallback: Show raw JSON (less pretty but functional)
         df_log_warn "jq not installed, showing raw output"
         echo "$nodes_status"
     fi
@@ -487,21 +656,34 @@ get_pve_node_status() {
 # ------------------------------------------------------------------------------
 # clean_dead_links
 #
-# Removes dead symlinks from current directory and subdirectories (max depth 2).
+# Removes dead symlinks from current directory and subdirectories.
+# Limits search to depth 2 for performance (prevents deep traversal).
+# Only removes links where target no longer exists.
 #
 # Parameters: None
 # Returns: None
+#
+# Examples:
+#   clean_dead_links  # Clean current directory tree
 # ------------------------------------------------------------------------------
 clean_dead_links() {
-    local -i dead_link_count=0
+    local -i dead_link_count=0  # Integer counter
     local link
 
+    # Process each dead link found
+    # find options:
+    # -maxdepth 2: Search only 2 levels deep
+    # -xtype l: Find symbolic links whose target doesn't exist
+    # 2>/dev/null: Suppress permission denied errors
     while IFS= read -r link; do
+        # Double-check target doesn't exist (safety)
         if [[ ! -e "$link" ]]; then
+            # Remove dead link and increment counter
             rm "$link" && ((dead_link_count++))
         fi
     done < <(find . -maxdepth 2 -xtype l 2>/dev/null)
 
+    # Report results
     if [[ $dead_link_count -gt 0 ]]; then
         df_log_success "Cleaned $dead_link_count dead link(s)"
     else

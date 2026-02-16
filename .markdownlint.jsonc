@@ -6,40 +6,305 @@
     // AUTHOR:      Stony64
     // CHANGES:     3.6.7 - No changes (VS Code config remains same)
     // --------------------------------------------------------------------------
-    "MD001": true, // Heading increment
+    // ==========================================================================
+    // MARKDOWNLINT PURPOSE
+    // ==========================================================================
+    // Enforces consistent Markdown formatting across documentation
+    // Used by: VS Code Extension (davidanson.vscode-markdownlint)
+    //
+    // Benefits:
+    //   - Consistent style (headings, lists, code blocks)
+    //   - Catches common mistakes (missing blank lines, duplicate headings)
+    //   - Improves readability (proper spacing, list alignment)
+    //   - Better git diffs (normalized formatting reduces noise)
+    //
+    // This file defines WHICH rules are enabled and HOW they behave
+    // Each rule has an MDxxx number (e.g., MD001, MD013)
+    // Documentation: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+    // ==========================================================================
+    // --- HEADING RULES --------------------------------------------------------
+    // MD001: Heading levels should increment by one level at a time
+    //   Enforces logical heading hierarchy (no skipping levels)
+    //   BAD:  # H1 → ### H3 (skipped H2)
+    //   GOOD: # H1 → ## H2 → ### H3
+    //
+    //   Why enforce: Screen readers and TOC generators rely on proper structure
+    //   Exception: None (always good practice)
+    "MD001": true,
+    // MD003: Heading style (consistent syntax)
+    //   Options:
+    //     - "atx": # Heading (no closing hashes)
+    //     - "atx_closed": # Heading # (with closing hashes)
+    //     - "setext": Heading\n======= (underline style)
+    //
+    //   Style: "atx_closed"
+    //   Why: Visual symmetry, easier to spot headings in plain text
+    //   Example:
+    //     ## Features ##  ← atx_closed (balanced)
+    //     ## Features     ← atx (no closing, also valid)
     "MD003": {
         "style": "atx_closed"
-    }, // Heading style
-    "MD004": {
-        "style": "dash"
-    }, // List style
-    "MD007": {
-        "indent": 4
-    }, // List indent
-    "MD009": {
-        "br_spaces": 2
-    }, // Trailing spaces
-    "MD013": false, // Line length disabled
-    "MD022": true, // Blank lines around headings
-    "MD024": {
-        "siblings_only": true
-    }, // Duplicate headings
+    },
+    // MD025: Multiple top-level headings (only one H1 allowed)
+    //   Prevents multiple # Heading in same document
+    //   Why: Each document should have ONE main title (like HTML <h1>)
+    //   BAD:
+    //     # Title 1
+    //     # Title 2 (second H1 confuses structure)
+    //   GOOD:
+    //     # Main Title
+    //     ## Subsection
+    //
+    //   level: 1 (only check for H1 duplicates, H2+ can repeat)
     "MD025": {
         "level": 1
-    }, // Top-level heading
+    },
+    // MD022: Headings should be surrounded by blank lines
+    //   Enforces spacing before/after headings for readability
+    //   BAD:
+    //     Text before
+    //     ## Heading
+    //     Text after
+    //   GOOD:
+    //     Text before
+    //
+    //     ## Heading ##
+    //
+    //     Text after
+    //
+    //   Why: Visual separation improves scanning/reading
+    "MD022": true,
+    // MD024: Multiple headings with the same content
+    //   Prevents duplicate heading text (confuses navigation)
+    //   siblings_only: true (allows duplicates in different sections)
+    //
+    //   Example allowed with siblings_only:
+    //     ## Installation ##
+    //     ### Linux ###
+    //     ## Usage ##
+    //     ### Linux ###  ← Allowed (different parent section)
+    //
+    //   Example forbidden (siblings):
+    //     ## Installation ##
+    //     ### Linux ###
+    //     ### Linux ###  ← Forbidden (same parent, siblings)
+    "MD024": {
+        "siblings_only": true
+    },
+    // --- LIST RULES -----------------------------------------------------------
+    // MD004: Unordered list style (consistent bullet character)
+    //   Options: "dash" (-), "asterisk" (*), "plus" (+)
+    //   Style: "dash"
+    //   Why dash:
+    //     - More readable in plain text (visually distinct from emphasis)
+    //     - Less likely to be confused with bold/italic markers (**, *)
+    //     - GitHub renders all the same, but source consistency matters
+    //
+    //   Enforces:
+    //     - Item 1  ← All dashes
+    //     - Item 2
+    //   Rejects:
+    //     - Item 1
+    //     * Item 2  ← Mixed styles (not allowed)
+    "MD004": {
+        "style": "dash"
+    },
+    // MD007: Unordered list indentation
+    //   Enforces consistent indent for nested lists
+    //   indent: 4 (spaces per level)
+    //
+    //   Example:
+    //     - Level 1
+    //         - Level 2 (4 spaces)
+    //             - Level 3 (8 spaces)
+    //
+    //   Why 4:
+    //     - Matches code block indent (visual consistency)
+    //     - Clear visual hierarchy (2 spaces too subtle)
+    //     - CommonMark spec allows 1-4 spaces (4 is max)
+    "MD007": {
+        "indent": 4
+    },
+    // MD029: Ordered list item prefix (numbering style)
+    //   Options:
+    //     - "one": All items start with 1.
+    //     - "ordered": Sequential (1. 2. 3.)
+    //     - "one_or_ordered": Either style (consistent per list)
+    //
+    //   Style: "one_or_ordered"
+    //   Why: Allows both styles (flexible)
+    //
+    //   "one" style (easier to reorder):
+    //     1. First
+    //     1. Second
+    //     1. Third
+    //
+    //   "ordered" style (shows count):
+    //     1. First
+    //     2. Second
+    //     3. Third
     "MD029": {
         "style": "one_or_ordered"
-    }, // Ordered list style
-    "MD031": true, // Blank lines around code blocks
-    "MD032": true, // Blank lines around lists
-    "MD033": false, // Inline HTML allowed
-    "MD034": false, // Bare URLs allowed
-    "MD040": false, // Code language not required
-    "MD041": false, // First line not required
+    },
+    // MD032: Lists should be surrounded by blank lines
+    //   Enforces spacing before/after lists for readability
+    //   BAD:
+    //     Text before
+    //     - Item 1
+    //     Text after
+    //   GOOD:
+    //     Text before
+    //
+    //     - Item 1
+    //
+    //     Text after
+    //
+    //   Why: Visual separation, prevents ambiguity with paragraphs
+    "MD032": true,
+    // --- WHITESPACE & LINE BREAKS ---------------------------------------------
+    // MD009: Trailing spaces (allowed for line breaks)
+    //   Markdown uses 2 trailing spaces for hard line break (<br>)
+    //   br_spaces: 2 (allow exactly 2 trailing spaces, remove others)
+    //
+    //   Allowed:
+    //     Line 1  (2 spaces = <br>)
+    //     Line 2
+    //
+    //   Forbidden:
+    //     Line 1   (3+ spaces = lint error)
+    //     Line 1 (1 space = lint error, use 0 or 2)
+    //
+    //   Why allow 2:
+    //     - Markdown convention for line breaks
+    //     - Alternative: backslash (Line 1\) less common
+    //   Why disallow others:
+    //     - Accidental whitespace (invisible, no purpose)
+    //     - Causes noisy git diffs
+    "MD009": {
+        "br_spaces": 2
+    },
+    // MD013: Line length (disabled)
+    //   Normally enforces max line length (default: 80 chars)
+    //   Why disabled:
+    //     - Markdown renderers handle wrapping automatically
+    //     - Long URLs/tables/code can't be wrapped
+    //     - Hard-wrapping makes source harder to edit
+    //     - Modern editors use soft wrap (visual only)
+    //
+    //   Alternative: Use editor's soft wrap (view-only wrapping)
+    "MD013": false,
+    // MD031: Fenced code blocks should be surrounded by blank lines
+    //   Enforces spacing before/after code blocks
+    //   BAD:
+    //     Text before
+    //     ```bash
+    //     code
+    //     ```
+    //     Text after
+    //   GOOD:
+    //     Text before
+    //
+    //     ```bash
+    //     code
+    //     ```
+    //
+    //     Text after
+    //
+    //   Why: Visual separation, prevents parser ambiguity
+    "MD031": true,
+    // --- HTML & INLINE CONTENT ------------------------------------------------
+    // MD033: Inline HTML (allowed)
+    //   Normally disallows HTML tags in Markdown
+    //   Why disabled:
+    //     - Sometimes necessary (complex tables, styling)
+    //     - GitHub supports HTML in Markdown
+    //     - Example: <details>, <summary>, <br>, <img>
+    //
+    //   When to use:
+    //     - Collapsible sections: <details><summary>
+    //     - Forced line breaks: <br>
+    //     - Image sizing: <img width="50%">
+    "MD033": false,
+    // MD034: Bare URL without angle brackets (allowed)
+    //   Normally requires: <https://example.com> instead of https://example.com
+    //   Why disabled:
+    //     - GitHub auto-links bare URLs (renders as link anyway)
+    //     - Angle brackets add visual noise
+    //     - Modern Markdown parsers handle bare URLs
+    //
+    //   Both work:
+    //     https://example.com       ← Auto-linked by GitHub
+    //     <https://example.com>     ← Explicit link
+    "MD034": false,
+    // --- CODE BLOCKS ----------------------------------------------------------
+    // MD040: Fenced code blocks should have a language specified (disabled)
+    //   Normally requires: ```bash instead of ```
+    //   Why disabled:
+    //     - Not all code blocks have a language (plain text, output)
+    //     - Language tags don't affect all renderers
+    //     - Enforcement too strict for non-code blocks
+    //
+    //   Best practice (but not enforced):
+    //     ```bash       ← Has language (syntax highlighting)
+    //     code
+    //     ```
+    //
+    //   Also allowed:
+    //     ```           ← No language (plain text)
+    //     output
+    //     ```
+    "MD040": false,
+    // MD046: Code block style (fenced vs indented)
+    //   Options:
+    //     - "fenced": ```code``` (triple backticks)
+    //     - "indented": 4-space indent
+    //
+    //   Style: "fenced"
+    //   Why fenced:
+    //     - Supports language tags (syntax highlighting)
+    //     - Clearer boundaries (visible start/end)
+    //     - Easier to copy-paste (no indent stripping)
+    //     - GitHub convention
+    //
+    //   Fenced (preferred):
+    //     ```bash
+    //     echo "Hello"
+    //     ```
+    //
+    //   Indented (not enforced):
+    //         echo "Hello"
     "MD046": {
         "style": "fenced"
-    }, // Code block style
+    },
+    // --- DOCUMENT STRUCTURE ---------------------------------------------------
+    // MD041: First line in a file should be a top-level heading (disabled)
+    //   Normally requires: # Title as first line
+    //   Why disabled:
+    //     - Some docs have frontmatter (YAML metadata)
+    //     - Some docs start with badges/shields
+    //     - README.md might have logo image first
+    //
+    //   Allowed:
+    //     ![Logo](logo.png)    ← Image first (common in README)
+    //     # Project Title
+    "MD041": false,
+    // --- TABLES ---------------------------------------------------------------
+    // MD060: Table pipe style (flexible)
+    //   Controls alignment of table pipe characters (|)
+    //   Options:
+    //     - "leading": | Col1 | Col2
+    //     - "trailing": Col1 | Col2 |
+    //     - "no_leading_or_trailing": Col1 | Col2
+    //     - "any": Any style allowed
+    //
+    //   Style: "any"
+    //   Why: Flexibility (formatters handle this automatically)
+    //
+    //   All allowed:
+    //     | Col1 | Col2 |      ← Both pipes
+    //     Col1 | Col2           ← No pipes
+    //     | Col1 | Col2         ← Leading only
     "MD060": {
         "style": "any"
-    } // Table pipe style
+    }
 }

@@ -6,161 +6,466 @@
 # CHANGES:     v3.6.7 - Remove Python/Node/Rust/unnecessary IDE patterns
 # ------------------------------------------------------------------------------
 
+# ==============================================================================
+# GITIGNORE STRUCTURE
+# ==============================================================================
+# This file is divided into two main sections:
+#
+# PART 1: IGNORE PATTERNS (Lines 25-180)
+#   - Files/directories to exclude from version control
+#   - Organized by category (secrets, temp files, OS junk, etc.)
+#   - Pattern format: file.txt, *.log, dir/, etc.
+#
+# PART 2: WHITELIST PATTERNS (Lines 182-250)
+#   - Explicit inclusions using ! (negation)
+#   - Overrides ignore patterns above
+#   - Critical: Must come AFTER ignore patterns
+#
+# Pattern precedence (highest to lowest):
+#   1. Explicit whitelist (!pattern)
+#   2. Nested ignore (dir/*/ignore)
+#   3. Wildcard ignore (*.log)
+#   4. Directory ignore (dir/)
+#
+# Example flow:
+#   *.log        → Ignore all .log files
+#   !debug.log   → Except debug.log (whitelist)
+#   Result: All .log ignored except debug.log
+# ==============================================================================
+
+
+# ==============================================================================
+# PART 1: IGNORE PATTERNS
+# ==============================================================================
+# Files and directories to EXCLUDE from version control
+# Organized by category for maintainability
+
+
 # --- LOCAL/PRIVATE OVERRIDES --------------------------------------------------
+# User-specific overrides and secrets that should NEVER be committed
+#
+# Pattern: *_local*
+#   Matches: config_local.sh, settings_local, deploy_local.conf
+#   Purpose: Local environment customizations (paths, IPs, credentials)
+#   Example: ~/.bashrc_local (sourced by .bashrc if exists)
 *_local*
+
+# Pattern: .bash*_local
+#   Matches: .bashrc_local, .bashenv_local, .bash_aliases_local
+#   Purpose: Personal shell configuration overrides
+#   Workflow: User creates .bashrc_local for local-only aliases
 .bash*_local
+
+# Bash history (contains sensitive commands, should not be shared)
+# Example: Contains: sudo mysql -p secret_password
 .bash_history
+
+# macOS bash sessions (contains command history per terminal)
 .bash_sessions/
+
+# SSH keys and config (CRITICAL: Never commit private keys!)
+# Contains: id_rsa, id_ed25519, authorized_keys, known_hosts
 .ssh/
+
+# GnuPG keys and trust database (CRITICAL: Private cryptographic material)
+# Contains: secring.gpg, pubring.gpg, trustdb.gpg
 .gnupg/
+
+# Environment variable files (often contain secrets)
+# Pattern: .env, .env.local, .env.production
+# Example: DATABASE_PASSWORD=secret123
 .env*
+
+# Network credentials file (CRITICAL: Contains passwords in plain text)
+# Format: machine example.com login user password secret
 .netrc
+
+# Cryptographic keys (CRITICAL: Never commit!)
+# Pattern: id_rsa, id_rsa.pub, server.key, ssl.pem, cert.crt
 id_rsa*
 *.pem
 *.key
 *.crt
 
+
 # --- EDITORS (Framework Development) ------------------------------------------
-# VS Code (primary development environment)
+# Editor-specific files and caches
+#
+# VS Code (primary development environment for framework)
+# Ignore most .vscode/ but WHITELIST key config files below
 .vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
-!.vscode/launch.json
-!.vscode/tasks.json
+!.vscode/settings.json       # WHITELISTED (shared team settings)
+!.vscode/extensions.json     # WHITELISTED (recommended extensions)
+!.vscode/launch.json         # WHITELISTED (debug configurations)
+!.vscode/tasks.json          # WHITELISTED (build tasks)
+
+# VS Code custom dictionary (user-specific word list)
+# Contains: shellcheck, proxmox, zpool, etc.
 .vscode/project-words.txt
 
-# Micro Editor (lightweight alternative)
+# Micro Editor (lightweight terminal editor)
+# Cache: syntax highlighting, plugin cache
 .config/micro/cache/
 *.micro*
 
-# Vim/Nano/Emacs (terminal editors)
+# Vim swap/backup files
+# .swp: Active editing (vim crashed, file still locked)
+# .swo/.swn: Multiple swap files (multiple vim instances)
+# ~: Backup files (file~ created before save)
 *.swp
 *.swo
 *.swn
 *~
+
+# Generic backup extensions
+# Created by: cp file file.bak, editors, patch tools
 *.bak
 *.old
 *.orig
 *.rej
+
+# Editor autosave files
+# Created by: Emacs (#file#), gedit (.autosave), etc.
 .autosave*
+
+# Vim runtime files
+# .vim/: User plugins, color schemes, cache
+# .viminfo: Command history, search history, marks
+# .netrwhist: netrw directory browsing history
 .vim/
 .viminfo
 .netrwhist
 
+
 # --- OS JUNK ------------------------------------------------------------------
-# macOS
+# Operating system metadata and caches (no functional value)
+
+# macOS Finder metadata
+# .DS_Store: Folder view settings, icon positions
+# .AppleDouble: Resource fork storage (legacy)
+# .LSOverride: Launch Services overrides
+# ._*: AppleDouble files (filename._file)
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
+
+# macOS system folders
+# .Spotlight-V100: Spotlight search index
+# .Trashes: User-specific trash (per-volume)
+# .TemporaryItems: Temp files during operations
+# .VolumeIcon.icns: Custom volume icon
 .Spotlight-V100
 .Trashes
 .TemporaryItems
 .VolumeIcon.icns
 
-# Windows
+# Windows thumbnail cache
+# Thumbs.db: Folder thumbnail cache (generated by Explorer)
+# ehthumbs.db: Thumbnail cache for high-quality images
 Thumbs.db
 ehthumbs.db
+
+# Windows folder customization
+# Desktop.ini: Folder icon, view settings
+# $RECYCLE.BIN/: Recycle bin folder (root of drive)
+# *.lnk: Windows shortcuts (not useful in repo)
 Desktop.ini
 $RECYCLE.BIN/
 *.lnk
 
-# Linux
+# Linux desktop environment files
+# .directory: KDE/Dolphin folder settings
+# .fuse_hidden*: FUSE filesystem hidden files
+# .Trash-*/: Per-user trash directories
+# .nfs*: NFS temporary files (file handle locks)
 .directory
 .fuse_hidden*
 .Trash-*/
 .nfs*
 
+
 # --- LOGS/TEMP/EXPORTS --------------------------------------------------------
+# Temporary files, logs, and dynamic output (regenerated, not committed)
+
+# Log files (application logs, debug output)
+# Example: app.log, error.log, install-2024-02-16.log
 *.log
+
+# Temporary files (short-lived, no value after process ends)
+# Example: download.tmp, processing.temp
 *.tmp
 *.temp
+
+# Cache directories (rebuild automatically, large, frequently changing)
+# Example: .cache/pip, .cache/shellcheck
 .cache/
+
+# Framework state file (runtime tracking, not configuration)
+# Contains: last update timestamp, deployed modules
 .dotfiles_state
+
+# Export/backup directories (user-generated, not part of framework)
+# _exports/: Manual exports (configs, scripts)
+# _backups/: Timestamped backups before updates
+# review_dump_*: Code review exports (temporary)
 _exports/
 _backups/
 review_dump_*
+
+# Testing sandbox (isolated test environment, disposable)
+# test_sandbox/: Full environment for integration tests
+# tests/out/: Test output artifacts (logs, diffs)
 test_sandbox/
 tests/out/
+
+# PID files (process IDs, only valid during runtime)
+# Example: dotfiles-daemon.pid (contains: 12345)
 *.pid
 
+
 # --- PROXMOX/ZFS (System specific) --------------------------------------------
+# Proxmox VE and ZFS-specific logs and temporary files
+# These files are system-generated and change constantly
+
+# Proxmox web proxy logs
+# pveproxy-*.log: Web interface access logs (regenerated)
 pveproxy-*.log
+
+# Proxmox container/VM management logs
+# /tmp/pct-*.log: Container (LXC) operation logs
+# /tmp/qm-*.log: QEMU/KVM VM operation logs
+# Pattern: /tmp/pct-root.log, /tmp/qm-user.log
 /tmp/pct-*.log
 /tmp/qm-*.log
+
+# ZFS cache files
+# zfs-list.cache: Cached output of 'zfs list' (stale quickly)
 zfs-list.cache
+
+# Proxmox task manager status
+# pvetm-status.log: Task queue status (changes per minute)
 pvetm-status.log
+
+# Proxmox system logs (should stay on system, not in repo)
+# /var/log/pve*: pvescheduler.log, pve-firewall.log, etc.
 /var/log/pve*
+
+# QEMU temporary disk images
+# *.qcow2.tmp: Temporary disk during resize/convert
 *.qcow2.tmp
 
+
 # --- BUILD/ARTIFACTS (Debian/Proxmox packages) --------------------------------
+# Compiled packages and archives (regenerated by build process)
+
+# Debian packages (built from source, not committed)
+# Example: dotfiles-framework_3.6.7_all.deb
 *.deb
+
+# Compressed archives (user-created, not part of source)
+# Example: backup-2024-02-16.tar.gz, export.zip, logs.7z
 *.tar.gz
 *.zip
 *.7z
 
+
 # --- CI/CD --------------------------------------------------------------------
+# Continuous Integration artifacts and templates
+
+# GitHub Actions logs (generated during workflow runs)
+# Example: shellcheck-2024-02-16.log
 .github/workflows/*.log
+
+# GitHub issue/PR templates (optional, some repos include them)
+# Reason for ignore: Framework uses minimal GitHub integration
 .github/ISSUE_TEMPLATE/
 .github/PULL_REQUEST_TEMPLATE/
 
-# --- WHITELIST CORE (EXPLICIT!) -----------------------------------------------
-# Framework Executables
+
+# ==============================================================================
+# PART 2: WHITELIST PATTERNS (EXPLICIT INCLUSIONS)
+# ==============================================================================
+# Files and directories to EXPLICITLY INCLUDE in version control
+# Uses ! (negation) to override ignore patterns above
+#
+# CRITICAL: Whitelist patterns must come AFTER ignore patterns!
+# Git processes .gitignore top-to-bottom:
+#   1. Apply ignore patterns (exclude files)
+#   2. Apply whitelist patterns (re-include files)
+#
+# Example:
+#   .vscode/*         → Ignore all .vscode/ files
+#   !.vscode/settings.json → Except settings.json (whitelist)
+#
+# Without !, settings.json would be ignored
+# With !, settings.json is explicitly tracked
+
+
+# --- FRAMEWORK CORE -----------------------------------------------------------
+# Essential framework executables and libraries
+
+# Main controller script (framework entry point)
+# Usage: sudo ./dotfilesctl.sh install
 !dotfilesctl.sh
+
+# Core framework library (foundational functions)
+# Sourced by: .bashrc, dotfilesctl.sh, all modules
 !core.sh
-!collect-review.sh
+
+# Library directory (framework utilities)
+# Contains: logging.sh, validators.sh, installers.sh
 !lib/
 !lib/**
 
-# Scripts
+
+# --- SCRIPTS ------------------------------------------------------------------
+# Automation and utility scripts
+
+# Scripts directory (maintenance, deployment, utilities)
+# Contains: backup.sh, deploy.sh, check-health.sh
 !scripts/
 !scripts/**
 
-# Meta Configs
+
+# --- CONFIGURATION FILES ------------------------------------------------------
+# Project-level configuration for development tools
+
+# EditorConfig (consistent coding style across editors)
+# Defines: indent_style=space, indent_size=4, charset=utf-8
 !.editorconfig
+
+# Git attributes (line endings, diff/merge strategies)
+# Example: *.sh text eol=lf (force LF line endings)
 !.gitattributes
+
+# This file (gitignore rules)
 !.gitignore
+
+# ShellCheck configuration (linter settings)
+# Defines: shell=bash, disable=SC2034, severity=warning
 !.shellcheckrc
+
+# Markdownlint configurations (documentation linting)
+# JSON format: rules, exceptions, custom settings
 !.markdownlint.jsonc
 !.markdownlint-cli2.jsonc
 
-# VS Code Standards (explicit whitelist)
+
+# --- VS CODE (SHARED SETTINGS) ------------------------------------------------
+# Team-shared VS Code configuration (NOT user-specific)
+#
+# Why whitelist?
+#   - Consistent development environment for contributors
+#   - Pre-configured linters (shellcheck, markdownlint)
+#   - Recommended extensions for framework development
+#
+# What's excluded?
+#   - .vscode/project-words.txt (user-specific dictionary)
+#   - .vscode/*.code-workspace (user layout preferences)
+
+# VS Code directory (already ignored above with .vscode/*)
 !.vscode/
+
+# Workspace settings (shared editor configuration)
+# Example: shellcheck integration, formatting rules
 !.vscode/settings.json
+
+# Recommended extensions (auto-suggest on open)
+# Example: timonwong.shellcheck, davidanson.vscode-markdownlint
 !.vscode/extensions.json
+
+# Debug configurations (framework testing/debugging)
+# Example: Launch dotfilesctl.sh with arguments
 !.vscode/launch.json
+
+# Build/test tasks (automated workflows)
+# Example: Run shellcheck, Run tests, Deploy locally
 !.vscode/tasks.json
 
-# GitHub
+
+# --- GITHUB -------------------------------------------------------------------
+# GitHub-specific configuration (Actions, templates, etc.)
+
+# GitHub directory (workflows, funding, CODEOWNERS)
 !.github/
+
+# GitHub Actions workflows (CI/CD automation)
 !.github/workflows/
+
+# Workflow YAML files (shellcheck, markdown lint, tests)
+# Example: ci.yml, release.yml, lint.yml
 !.github/workflows/*.yml
 !.github/workflows/*.yaml
 
-# Dotfiles (Explicit!)
+
+# --- DOTFILES (CORE FRAMEWORK) ------------------------------------------------
+# User environment files (bash configuration, shell customization)
+#
+# EXPLICIT whitelisting ensures these are never accidentally ignored
+# Pattern: home/.bash* could match ignored .bash_history, so be specific
+
+# Home directory structure (user environment files)
 !home/
+
+# All bash-related files (glob pattern, includes .bashrc, .bash_profile)
 !home/.bash*
-!home/.bashenv
-!home/.bashprompt
-!home/.bashaliases
-!home/.bashfunctions
-!home/.bashwartung
-!home/.bashrc
+
+# Specific bash modules (explicit for clarity)
+!home/.bashenv          # Environment variables (PATH, EDITOR, colors)
+!home/.bashprompt       # PS1 configuration (Git-aware prompt)
+!home/.bashaliases      # Command aliases and shortcuts
+!home/.bashfunctions    # Bash functions (utilities, helpers)
+!home/.bashwartung      # System maintenance (APT, ZFS, locate)
+!home/.bashrc           # Main bash initialization
+
+# Terminal color configuration
+# .dircolors: LS_COLORS configuration (colored ls output)
 !home/.dircolors
+
+# Nano editor configuration
+# .nanorc: Syntax highlighting, key bindings, options
 !home/.nanorc
+
+# User config directory (application settings)
+# Example: home/.config/micro/, home/.config/git/
 !home/.config/
 !home/.config/**
 
-# Documentation
+
+# --- DOCUMENTATION ------------------------------------------------------------
+# Project documentation and guidelines
+
+# Style guide (coding standards, naming conventions)
 !STYLEGUIDE.md
+
+# Main documentation (installation, usage, FAQ)
 !README.md
+
+# Version history (release notes, breaking changes)
 !CHANGELOG.md
+
+# License information (GPL, MIT, Apache, etc.)
 !LICENSE
+
+# Documentation directory (detailed guides, architecture)
+# Contains: INSTALL.md, ARCHITECTURE.md, API.md
 !docs/
 !docs/**
 
-# Examples/Templates
+
+# --- EXAMPLES/TEMPLATES -------------------------------------------------------
+# Reference configurations and starting points
+
+# Example files (sample configs for users to copy)
+# Pattern: config.example, .env.example, settings.template
 !*.example
+
+# Template files (boilerplate for new configs)
+# Pattern: template.sh, module.template, config_template
 !*template*
+
+# Examples directory (complete working examples)
+# Contains: basic-setup/, advanced-git/, proxmox-integration/
 !examples/
 !examples/**

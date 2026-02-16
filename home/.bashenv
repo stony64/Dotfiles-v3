@@ -8,87 +8,156 @@
 # ------------------------------------------------------------------------------
 
 # ShellCheck configuration
+# SC2034: Unused variables OK (exports for other processes)
+# SC2086: Word splitting intentional for some variables
 # shellcheck source=/dev/null disable=SC2034,SC2086
 
 # --- IDEMPOTENCY GUARD --------------------------------------------------------
 # Prevents multiple loading and PROMPT_COMMAND duplication
+# Critical for reload_shell function to avoid exponential growth
 [[ -n "${DF_BASHENV_LOADED:-}" ]] && return 0
 readonly DF_BASHENV_LOADED=1
 
 # --- STRICT MODE (PARTIAL) ----------------------------------------------------
-# NOTE: 'set -e' is intentionally NOT set globally here, as it would close the
-# entire login shell on a failed environment check.
-# 'set -u' is also NOT set to avoid breaking scripts that use unset variables.
+# NOTE: 'set -e' is intentionally NOT set globally here
+#
+# Rationale:
+# - This file is sourced by interactive shells (.bashrc)
+# - 'set -e' would close entire login shell on failed environment check
+# - 'set -u' would break scripts that use ${VAR:-default} patterns
+# - Interactive shells must remain resilient to failures
+#
+# Only enable:
+# - set -o pipefail: Pipes propagate exit code of last failed command
+#   Example: cmd1 | cmd2 | cmd3 → Returns exit code of first failed command
 
-set -o pipefail  # Pipes propagate exit code of last failed command
+set -o pipefail
 
 # --- FRAMEWORK INTEGRATION ----------------------------------------------------
 # Source core.sh if available for version and utilities
+# Conditional loading: Only if not already loaded (idempotency)
 if [[ -z "${DF_CORE_LOADED:-}" && -f "${DF_REPO_ROOT:-/opt/dotfiles}/core.sh" ]]; then
     # shellcheck source=/dev/null
+    # || true: Don't fail if core.sh has errors (resilient loading)
     source "${DF_REPO_ROOT:-/opt/dotfiles}/core.sh" 2>/dev/null || true
 fi
 
-# Fallback if core.sh not loaded
+# Fallback if core.sh not loaded (standalone mode)
 if [[ -z "${DF_REPO_ROOT:-}" ]]; then
     export DF_REPO_ROOT="/opt/dotfiles"
 fi
 
 # --- EDITOR & VIEWER (AUTO-DISCOVERY) -----------------------------------------
-# Priority chain: nano > micro > code/codium > nvim > vi
+# Automatically sets EDITOR, VISUAL, and GIT_EDITOR based on availability
+#
+# Priority chain (first found wins):
+#   1. nano    → User-friendly, installed on most systems
+#   2. micro   → Modern terminal editor with mouse support
+#   3. code    → Visual Studio Code (if in PATH)
+#   4. codium  → VSCodium (open-source VS Code)
+#   5. nvim    → Neovim (modern vim)
+#   6. vi      → Classic vi (always available as fallback)
+#
+# Variables set:
+#   EDITOR:     System default editor (used by crontab, visudo, etc.)
+#   VISUAL:     Visual editor (preferred over EDITOR if set)
+#   GIT_EDITOR: Git-specific editor (overrides EDITOR for git commit)
+
 for cmd in nano micro code codium nvim vi; do
     if command -v "$cmd" >/dev/null 2>&1; then
         export EDITOR="$cmd"
         export VISUAL="$cmd"
         export GIT_EDITOR="$cmd"
-        break
+        break  # Stop after first match
     fi
 done
 
 # --- HISTORY CONFIGURATION ----------------------------------------------------
+# Bash history settings for better command tracking and multi-terminal sync
+
+# Add timestamp to history entries (format: YYYY-MM-DD HH:MM:SS)
+# Useful for auditing and finding when a command was executed
 export HISTTIMEFORMAT="%F %T "
+
+# ignoreboth: Ignore duplicate commands AND commands starting with space
+# erasedups: Remove all previous duplicate entries when adding new one
+# Result: Clean history without repeated commands
 export HISTCONTROL="ignoreboth:erasedups"
+
+# Commands to exclude from history (privacy and noise reduction)
+# Patterns: &=previous command, single commands, common shortcuts
 export HISTIGNORE="&:ls:ll:la:l:..:pwd:exit:clear:mc:au:dctl:proxmox:pct:qm:zfs:zpool:git:st:co"
+
+# In-memory history size (commands kept in current session)
 export HISTSIZE=10000
+
+# History file size (commands persisted to ~/.bash_history)
 export HISTFILESIZE=100000
 
 # Shell options for better history handling
-shopt -s histappend 2>/dev/null     # Append history instead of overwriting
-shopt -s cmdhist 2>/dev/null        # Multi-line commands as single entry
-shopt -s cdspell 2>/dev/null        # Corrects minor cd typos
-shopt -s checkwinsize 2>/dev/null   # Updates window size after each command
-shopt -s globstar 2>/dev/null       # Enables recursive globbing with **
+shopt -s histappend 2>/dev/null     # Append to history file (don't overwrite)
+shopt -s cmdhist 2>/dev/null        # Save multi-line commands as single entry
+shopt -s cdspell 2>/dev/null        # Auto-correct minor typos in cd arguments
+shopt -s checkwinsize 2>/dev/null   # Update LINES/COLUMNS after each command
+shopt -s globstar 2>/dev/null       # Enable ** for recursive glob (bash 4+)
 
 # Immediate history save after each command (multi-terminal sync)
-# Only append if not already present (prevents duplication on reload)
+# Without this: History only saved on shell exit (lost on crash)
+# With this: Every command immediately appended to ~/.bash_history
+#
+# history -a: Append new history lines to history file
+#
+# Safe appending: Only add if not already present (prevents duplication on reload)
 if [[ "${PROMPT_COMMAND:-}" != *"history -a"* ]]; then
     if [[ -n "${PROMPT_COMMAND:-}" ]]; then
+        # Prepend: Our command runs first, then existing PROMPT_COMMAND
         PROMPT_COMMAND="history -a; ${PROMPT_COMMAND}"
     else
+        # No existing PROMPT_COMMAND - set directly
         PROMPT_COMMAND="history -a"
     fi
     export PROMPT_COMMAND
 fi
 
 # --- TERMINAL COLORS & PAGER --------------------------------------------------
+# Configure colored output for man pages and less pager
+# Only enable if terminal supports colors (not dumb terminal)
+
 if [[ "$TERM" != "dumb" ]] && command -v tput >/dev/null 2>&1; then
+    # Man page pager configuration
+    # less -s: Squeeze multiple blank lines into one
+    # less -M: Long prompt (shows position in file)
+    # less +Gg: Start at end of file, show percentage
     export MANPAGER="less -s -M +Gg"
 
-    # Colored Man-Pages via LESS_TERMCAP
+    # Colored Man Pages via LESS_TERMCAP_* environment variables
+    # These control ANSI escape sequences in less pager
+    #
+    # tput commands:
+    #   bold:   Bold text
+    #   setaf:  Set foreground color (1=red, 2=green, 3=yellow, 4=blue)
+    #   setab:  Set background color
+    #   sgr0:   Reset all attributes
+    #   smul:   Start underline
+    #   rmul:   Remove underline
+    #   rmso:   Remove standout
+
     # Separate declaration and assignment to avoid SC2155
-    LESS_TERMCAP_mb="$(tput bold; tput setaf 1)"  # Blinking (bold red)
+    # (ShellCheck warns about masking return values in combined declare+assign)
+
+    LESS_TERMCAP_mb="$(tput bold; tput setaf 1)"  # Blinking text (bold red)
     export LESS_TERMCAP_mb
 
-    LESS_TERMCAP_md="$(tput bold; tput setaf 3)"  # Bold/Header (yellow)
+    LESS_TERMCAP_md="$(tput bold; tput setaf 3)"  # Bold/Headers (bold yellow)
     export LESS_TERMCAP_md
 
-    LESS_TERMCAP_me="$(tput sgr0)"                # Reset
+    LESS_TERMCAP_me="$(tput sgr0)"                # Reset all
     export LESS_TERMCAP_me
 
-    LESS_TERMCAP_se="$(tput rmso; tput sgr0)"     # Standout end
+    LESS_TERMCAP_se="$(tput rmso; tput sgr0)"     # Standout mode end
     export LESS_TERMCAP_se
 
-    LESS_TERMCAP_so="$(tput bold; tput setab 4; tput setaf 3)"  # Info bar
+    LESS_TERMCAP_so="$(tput bold; tput setab 4; tput setaf 3)"  # Info bar (blue bg, yellow fg)
     export LESS_TERMCAP_so
 
     LESS_TERMCAP_ue="$(tput rmul; tput sgr0)"     # Underline end
@@ -97,43 +166,84 @@ if [[ "$TERM" != "dumb" ]] && command -v tput >/dev/null 2>&1; then
     LESS_TERMCAP_us="$(tput smul; tput setaf 2)"  # Underline start (green)
     export LESS_TERMCAP_us
 
-    # Modern less flags: R (colors), i (case-insensitive), M (long prompt)
+    # Modern less flags for better user experience
+    # -R: Display ANSI colors correctly (raw control chars)
+    # -i: Case-insensitive search (unless uppercase in pattern)
+    # -w: Highlight first unread line after page down
+    # -z-4: Keep 4 lines context when scrolling
+    # -M: Long prompt (verbose status line)
+    # --shift=5: Horizontal scroll by 5 columns with arrow keys
     export LESS='-R -i -w -z-4 -M --shift=5'
 fi
 
 # --- FZF CONFIGURATION --------------------------------------------------------
+# Fuzzy finder (fzf) configuration for interactive file/command search
+# Only configure if fzf is installed
+
 if command -v fzf >/dev/null 2>&1; then
+    # Default fzf options (applies to all fzf invocations)
+    # --height 50%: Use bottom half of screen (doesn't fullscreen)
+    # --layout=reverse: Results top-to-bottom (natural reading order)
+    # --border: Draw border around fzf window
+    # --margin=1: Add 1-line margin around window
+    # --info=inline: Show match count inline (saves vertical space)
     export FZF_DEFAULT_OPTS='--height 50% --layout=reverse --border --margin=1 --info=inline'
 
-    # Use bat as preview engine if installed
+    # File preview configuration (Ctrl+T integration)
+    # Use bat (modern cat with syntax highlighting) as preview engine
+    # Fallback to batcat (Debian/Ubuntu package name)
     if command -v bat >/dev/null 2>&1; then
+        # bat --style=numbers: Show line numbers
+        # bat --color=always: Force colored output
+        # bat --line-range :500: Preview first 500 lines (performance)
         export FZF_CTRL_T_OPTS="--preview 'bat --style=numbers --color=always --line-range :500 {}'"
     elif command -v batcat >/dev/null 2>&1; then
+        # Same as above, but using batcat binary name (Debian/Ubuntu)
         export FZF_CTRL_T_OPTS="--preview 'batcat --style=numbers --color=always --line-range :500 {}'"
     fi
 fi
 
 # --- LOCALES (SYSTEM-AWARE) ---------------------------------------------------
+# Configure language and character encoding for system and applications
+
 # Set LC_CTYPE to C.UTF-8 for correct sorting in scripts
+# C.UTF-8: Minimal locale with UTF-8 support (no translations)
+# Used for: sort, grep, sed to ensure consistent behavior across systems
 export LC_CTYPE=C.UTF-8
 
-# Detect German locale, fallback to English
+# Detect German locale availability, fallback to English
+# locale -a: List all available locales on system
+# grep -qE: Quiet extended regex match
 if [[ "$(uname -s)" == "Linux" ]] && locale -a 2>/dev/null | grep -qE "(de_DE|de_DE.UTF-8)"; then
-    export LANG=de_DE.UTF-8
-    export LC_MESSAGES=de_DE.UTF-8
+    # German locale found - set German messages and formats
+    export LANG=de_DE.UTF-8        # Overall locale (affects all categories)
+    export LC_MESSAGES=de_DE.UTF-8 # UI messages (errors, prompts)
 else
+    # Fallback to English (universal, always available)
     export LANG=en_US.UTF-8
     export LC_MESSAGES=en_US.UTF-8
 fi
 
 # --- PROXMOX / ZFS / GPG ------------------------------------------------------
+# Linux-specific configurations for Proxmox, ZFS, and GPG
+
 if [[ "$(uname -s)" == "Linux" ]]; then
-    # ZFS feature flags
+    # ZFS feature flags (enable specific features for pools)
+    # async_destroy: Asynchronous dataset destruction (faster delete)
+    # bookmarks: Support for ZFS bookmarks (reference points)
     export ZPOOL_FEATURES="async_destroy,bookmarks"
 
     # GPG TTY assignment (prevents passphrase prompt errors)
+    # GPG needs to know which terminal to use for PIN entry
+    # Without this: GPG fails with "Inappropriate ioctl for device"
+    #
+    # tty: Returns current terminal device path (e.g., /dev/pts/0)
     # Separate declaration and assignment to avoid SC2155
     GPG_TTY="$(tty 2>/dev/null)"
     export GPG_TTY
+
+    # PINENTRY_USER_DATA: Tell GPG to use curses-based PIN entry
+    # USE_CURSES=1: Use text-based PIN prompt (works in SSH sessions)
+    # Alternative: USE_TTY=1 (simpler text prompt)
     export PINENTRY_USER_DATA="USE_CURSES=1"
 fi

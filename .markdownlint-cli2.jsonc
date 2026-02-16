@@ -6,91 +6,201 @@
     // AUTHOR:      Stony64
     // CHANGES:     3.6.7 - Enable fix: true for auto-fixing
     // --------------------------------------------------------------------------
-    // Purpose: Validates Markdown files in CI/CD pipeline and local checks
+    // ==========================================================================
+    // MARKDOWNLINT-CLI2 PURPOSE
+    // ==========================================================================
+    // Validates Markdown files in CI/CD pipeline and local checks
     // Used by: markdownlint-cli2 (GitHub Actions, pre-commit hooks)
-    // --------------------------------------------------------------------------
+    //
+    // Differences from .markdownlint.jsonc (VS Code):
+    //   1. File selection: globs (which files to check)
+    //   2. Ignores: exclude directories/patterns
+    //   3. Auto-fix: fix: true (auto-correct issues)
+    //   4. Output: formatter configuration for CI logs
+    //
+    // Usage:
+    //   CLI: markdownlint-cli2 "**/*.md"
+    //   Fix: markdownlint-cli2 --fix "**/*.md"
+    //   CI: markdownlint-cli2 (reads config automatically)
+    // ==========================================================================
     // --- FILE SELECTION -------------------------------------------------------
-    // Which Markdown files to lint
+    // Glob patterns: Which Markdown files to lint
+    // Uses glob syntax: ** (recursive), * (wildcard)
     "globs": [
+        // All Markdown files recursively
+        // Pattern: **/*.md matches any/nested/path/file.md
         "**/*.md",
-        "README.md",
-        "STYLEGUIDE.md",
-        "CHANGELOG.md",
+        // Explicit important files (ensures they're checked even if patterns change)
+        // These are critical documentation files
+        "README.md", // Project documentation (entry point)
+        "STYLEGUIDE.md", // Coding standards
+        "CHANGELOG.md", // Version history
+        // Documentation directory (explicit pattern for clarity)
+        // Pattern: docs/**/*.md matches docs/install.md, docs/api/reference.md
         "docs/**/*.md"
     ],
-    // Which files/directories to ignore
+    // --- IGNORE PATTERNS ------------------------------------------------------
+    // Which files/directories to exclude from linting
+    // Reasons to ignore: Generated files, dependencies, temporary files
     "ignores": [
+        // Node.js dependencies (third-party, not our code)
+        // Pattern: node_modules/** matches any depth inside node_modules/
         "node_modules/**",
+        // Git internal files (metadata, not documentation)
         ".git/**",
+        // Export directories (user-generated, temporary)
+        // Pattern: **/_exports/** matches any _exports/ directory at any level
         "**/_exports/**",
+        // Local overrides (user-specific, not committed)
+        // Pattern: **/*_local.md matches any file ending with _local.md
         "**/*_local.md",
+        // Test sandbox (temporary test environment, disposable)
         "**/test_sandbox/**",
-        "home/**",
+        // Backup directories (old files, not current documentation)
         "**/backup/**",
+        // Build artifacts (generated files, not source)
         "**/dist/**",
-        "**/build/**"
+        "**/build/**",
+        // Home directory (user dotfiles, not project docs)
+        // Framework stores bash configs in home/, not Markdown
+        "home/**"
     ],
     // --- LINTING RULES --------------------------------------------------------
-    // Same rules as .markdownlint.jsonc for consistency
+    // Same rules as .markdownlint.jsonc for consistency between VS Code and CLI
+    // This ensures editor and CI use identical standards
     "config": {
-        // Heading structure
+        // --- HEADING RULES ----------------------------------------------------
+        // MD001: Heading levels should increment by one level at a time
+        // Enforces logical hierarchy (# → ## → ###, no skipping)
         "MD001": true,
+        // MD003: Heading style (atx_closed: # Heading #)
+        // Consistent heading syntax with closing hashes
         "MD003": {
             "style": "atx_closed"
         },
+        // MD025: Multiple top-level headings (only one H1 per document)
+        // level: 1 (only check for duplicate H1, H2+ can repeat)
         "MD025": {
             "level": 1
         },
-        // List formatting
-        "MD004": {
-            "style": "dash"
-        },
-        "MD007": {
-            "indent": 4
-        },
-        "MD029": {
-            "style": "one_or_ordered"
-        },
-        "MD032": true,
-        // Whitespace & line breaks
-        "MD009": {
-            "br_spaces": 2
-        },
+        // MD022: Headings should be surrounded by blank lines
+        // Visual separation for better readability
         "MD022": true,
-        "MD031": true,
-        // Line length (disabled for tables)
-        "MD013": false,
-        // Duplicate headings
+        // MD024: Multiple headings with same content (siblings_only)
+        // Allows duplicates in different sections (## Installation → ## Usage)
         "MD024": {
             "siblings_only": true
         },
-        // HTML & inline code
+        // --- LIST RULES -------------------------------------------------------
+        // MD004: Unordered list style (dash: -)
+        // Consistent bullet character (- instead of * or +)
+        "MD004": {
+            "style": "dash"
+        },
+        // MD007: Unordered list indentation (4 spaces per level)
+        // Clear visual hierarchy for nested lists
+        "MD007": {
+            "indent": 4
+        },
+        // MD029: Ordered list item prefix (one_or_ordered)
+        // Allows both styles: 1. 1. 1. OR 1. 2. 3.
+        "MD029": {
+            "style": "one_or_ordered"
+        },
+        // MD032: Lists should be surrounded by blank lines
+        // Visual separation from surrounding text
+        "MD032": true,
+        // --- WHITESPACE & LINE BREAKS -----------------------------------------
+        // MD009: Trailing spaces (br_spaces: 2)
+        // Allow 2 trailing spaces (Markdown line break), remove others
+        "MD009": {
+            "br_spaces": 2
+        },
+        // MD031: Fenced code blocks should be surrounded by blank lines
+        // Visual separation for code blocks
+        "MD031": true,
+        // MD013: Line length (disabled)
+        // No max line length (Markdown renderers handle wrapping)
+        "MD013": false,
+        // --- HTML & INLINE CONTENT --------------------------------------------
+        // MD033: Inline HTML (allowed)
+        // Permits HTML tags (<details>, <img>, etc.)
         "MD033": false,
+        // MD034: Bare URL without angle brackets (allowed)
+        // Permits: https://example.com (auto-linked by GitHub)
         "MD034": false,
-        // Code blocks
+        // --- CODE BLOCKS ------------------------------------------------------
+        // MD040: Code language specification (disabled)
+        // Not all code blocks need language tags
         "MD040": false,
+        // MD046: Code block style (fenced: ```code```)
+        // Prefer fenced over indented (clearer, supports syntax highlighting)
         "MD046": {
             "style": "fenced"
         },
-        // Frontmatter
+        // --- DOCUMENT STRUCTURE -----------------------------------------------
+        // MD041: First line should be top-level heading (disabled)
+        // Allows non-heading first line (frontmatter, badges, images)
         "MD041": false,
-        // Tables
+        // --- TABLES -----------------------------------------------------------
+        // MD060: Table pipe style (any)
+        // Flexible table formatting (formatters handle alignment)
         "MD060": {
             "style": "any"
         }
     },
     // --- OUTPUT CONFIGURATION -------------------------------------------------
-    // Pretty formatter for human-readable output
+    // How linting results are displayed (especially in CI/CD logs)
     "outputFormatters": [
         [
+            // Pretty formatter: Human-readable output with colors
+            // Example output:
+            //   README.md:15 MD001/heading-increment Heading levels should only increment by one level at a time
+            //   README.md:42:10 MD009/no-trailing-spaces Trailing spaces
+            //
+            // Alternative formatters:
+            //   - "markdownlint-cli2-formatter-json" (machine-readable)
+            //   - "markdownlint-cli2-formatter-junit" (JUnit XML for Jenkins)
+            //   - "markdownlint-cli2-formatter-sarif" (SARIF for GitHub Code Scanning)
             "markdownlint-cli2-formatter-pretty"
         ]
     ],
-    // Allow inline HTML comments to disable rules
+    // noInlineConfig: false
+    //   Allows inline HTML comments to disable rules
+    //   Example: <!-- markdownlint-disable MD013 --> (disable line length)
+    //
+    //   Use cases:
+    //     - Long tables that can't be wrapped
+    //     - Auto-generated content (don't want to fix)
+    //     - Exceptions for specific sections
+    //
+    //   Syntax:
+    //     <!-- markdownlint-disable MD013 --> (disable for rest of file)
+    //     Long line here...
+    //     <!-- markdownlint-enable MD013 --> (re-enable)
+    //
+    //   Or single line:
+    //     Long line here... <!-- markdownlint-disable-line MD013 -->
     "noInlineConfig": false,
-    // Automatically fix auto-fixable issues
-    // Fixes: MD009 (trailing spaces), MD022/MD031/MD032 (blank lines),
-    //        MD047 (final newline), etc.
-    // Use CLI: markdownlint-cli2 --fix "**/*.md"
+    // fix: true
+    //   Automatically fix auto-fixable issues (DESTRUCTIVE!)
+    //
+    //   Auto-fixable rules:
+    //     - MD009: Remove trailing spaces (except 2-space line breaks)
+    //     - MD022: Add blank lines around headings
+    //     - MD031: Add blank lines around code blocks
+    //     - MD032: Add blank lines around lists
+    //     - MD047: Add final newline to file
+    //
+    //   Not auto-fixable (require manual fixing):
+    //     - MD001: Heading increment (restructure needed)
+    //     - MD024: Duplicate headings (rename needed)
+    //     - MD025: Multiple H1 (remove/merge needed)
+    //
+    //   Usage:
+    //     CLI: markdownlint-cli2 --fix "**/*.md"
+    //     CI: Enable for auto-commit of fixes (careful!)
+    //
+    //   Warning: Review changes after auto-fix (may break intentional formatting)
     "fix": true
 }

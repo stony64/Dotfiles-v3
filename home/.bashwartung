@@ -7,34 +7,40 @@
 # CHANGES:     v3.6.7 - Make lock timeout configurable, implement timeout check
 # ------------------------------------------------------------------------------
 
-# ShellCheck configuration
+# ShellCheck configuration (ignore missing source file, allow unused variables)
 # shellcheck source=/dev/null disable=SC2034
 
 # --- IDEMPOTENCY GUARD --------------------------------------------------------
-# Prevents multiple loading of this file
+# Prevents multiple loading of this file (sourced by .bashrc)
 [[ -n "${DF_BASHWARTUNG_LOADED:-}" ]] && return 0
 readonly DF_BASHWARTUNG_LOADED=1
 
 # --- CONFIGURATION ------------------------------------------------------------
+# Lock file prevents parallel execution (flock-based exclusive lock)
 readonly WARTUNG_LOCKFILE="/var/run/bashwartung.lock"
+
+# Log file for maintenance history (CSV format: timestamp, hostname, mode, duration, errors)
 readonly WARTUNG_LOGFILE="/var/log/bashwartung.log"
 
 # Lock timeout configurable via environment variable (default: 3600s = 1h)
+# Prevents hung maintenance processes from blocking indefinitely
 # Examples:
-#   export DF_WARTUNG_LOCK_TIMEOUT=7200  # 2 hours
-#   export DF_WARTUNG_LOCK_TIMEOUT=1800  # 30 minutes
+#   export DF_WARTUNG_LOCK_TIMEOUT=7200  # 2 hours for slow systems
+#   export DF_WARTUNG_LOCK_TIMEOUT=1800  # 30 minutes for fast systems
 readonly WARTUNG_LOCK_TIMEOUT="${DF_WARTUNG_LOCK_TIMEOUT:-3600}"
 
-# Maximum retries for lock acquisition (1 retry = 5 seconds)
-readonly WARTUNG_LOCK_RETRIES="${DF_WARTUNG_LOCK_RETRIES:-12}"  # Default: 60s total
+# Maximum retries for lock acquisition (1 retry = 5 seconds wait)
+# Default: 12 retries = 60s total wait time before giving up
+readonly WARTUNG_LOCK_RETRIES="${DF_WARTUNG_LOCK_RETRIES:-12}"
 
 # --- BOOTSTRAP (LOGGING & UI) -------------------------------------------------
 # Provides fallback colored logging functions if core framework is missing
+# Allows standalone execution without full dotfiles framework
 if ! command -v df_log_error >/dev/null 2>&1; then
-    df_log_error()   { printf '\033[31m[ERR]\033[0m %s\n' "$*" >&2; }
-    df_log_success() { printf '\033[32m[OK]\033[0m %s\n' "$*"; }
-    df_log_info()    { printf '\033[34m-->\033[0m %s\n' "$*"; }
-    df_log_warn()    { printf '\033[33m[!]\033[0m %s\n' "$*"; }
+    df_log_error()   { printf '\033[31m[ERR]\033[0m %s\n' "$*" >&2; }  # Red to stderr
+    df_log_success() { printf '\033[32m[OK]\033[0m %s\n' "$*"; }       # Green
+    df_log_info()    { printf '\033[34m-->\033[0m %s\n' "$*"; }        # Blue
+    df_log_warn()    { printf '\033[33m[!]\033[0m %s\n' "$*"; }        # Yellow
 fi
 
 # --- LOCK MANAGEMENT ----------------------------------------------------------
@@ -43,27 +49,33 @@ fi
 # _acquire_lock
 #
 # Acquires exclusive lock to prevent parallel execution.
-# Uses flock with timeout and retry mechanism.
+# Uses flock (file-based locking) with timeout and retry mechanism.
+# Writes PID and metadata to lockfile for debugging.
+# Sets up trap to release lock on exit (normal or abnormal).
+# Starts background timeout monitor as safety net.
 #
 # Parameters: None
-# Returns: 0 success, 1 if lock acquisition failed
-# Side Effects: Sets file descriptor 200 for lock
+# Returns: 0 success, 1 if lock acquisition failed after all retries
+# Side Effects: Sets file descriptor 200 for lock, starts background monitor
 #
 # Configuration:
 #   DF_WARTUNG_LOCK_TIMEOUT  - Maximum lock duration (default: 3600s)
 #   DF_WARTUNG_LOCK_RETRIES  - Lock acquisition retries (default: 12 = 60s)
 # ------------------------------------------------------------------------------
 _acquire_lock() {
-    local lock_fd=200
+    local lock_fd=200  # File descriptor for lock (standard convention)
     local lock_file="$WARTUNG_LOCKFILE"
     local retries=0
     local max_retries="$WARTUNG_LOCK_RETRIES"
 
     # Open lockfile for writing (create if needed)
+    # eval required for dynamic file descriptor assignment
     eval "exec ${lock_fd}>${lock_file}"
 
     # Try to acquire exclusive lock with retries
+    # flock -n: Non-blocking (fail immediately if locked)
     while ! flock -n "$lock_fd"; do
+        # Check if max retries exceeded
         if (( retries >= max_retries )); then
             df_log_error "Failed to acquire lock after $((max_retries * 5))s"
             df_log_error "Another maintenance process is running or stuck"
@@ -72,35 +84,41 @@ _acquire_lock() {
             # Show lock holder PID if available
             if [[ -f "$lock_file" && -r "$lock_file" ]]; then
                 local lock_pid
-                lock_pid=$(<"$lock_file" 2>/dev/null)
+                lock_pid=$(<"$lock_file" 2>/dev/null)  # Read first line (PID)
+
+                # Check if process is actually running
                 if [[ -n "$lock_pid" ]] && ps -p "$lock_pid" >/dev/null 2>&1; then
                     df_log_info "Lock held by PID: $lock_pid"
                 else
+                    # Stale lock (process died without releasing)
                     df_log_warn "Stale lock detected (PID $lock_pid not running)"
                     df_log_info "Remove manually: sudo rm $lock_file"
                 fi
             fi
 
+            # Close file descriptor and fail
             eval "exec ${lock_fd}>&-"
             return 1
         fi
 
         df_log_warn "Lock busy, waiting... (attempt $((retries+1))/$max_retries)"
-        sleep 5
+        sleep 5  # Wait before retry
         ((retries++))
     done
 
-    # Write PID and timeout info to lockfile for debugging
+    # Lock acquired - write PID and metadata to lockfile for debugging
     {
-        echo "$$"
+        echo "$$"  # Current process PID
         echo "Timeout: $WARTUNG_LOCK_TIMEOUT seconds"
         echo "Started: $(date '+%Y-%m-%d %H:%M:%S')"
     } >&"${lock_fd}"
 
     # Ensure lock is released on exit (single quotes = deferred expansion)
+    # Trap catches: normal exit, Ctrl+C (INT), kill (TERM)
     trap '_release_lock '"${lock_fd}" EXIT INT TERM
 
     # Start background timeout killer (safety net for hung processes)
+    # Runs in background and terminates parent if timeout exceeded
     _start_lock_timeout_monitor "$WARTUNG_LOCK_TIMEOUT" &
 
     return 0
@@ -111,6 +129,7 @@ _acquire_lock() {
 #
 # Monitors lock timeout and forcefully terminates if exceeded.
 # Runs in background and kills parent process after timeout.
+# Two-stage termination: SIGTERM (graceful), then SIGKILL (force).
 #
 # Parameters:
 #   $1 - Timeout in seconds
@@ -118,17 +137,20 @@ _acquire_lock() {
 # ------------------------------------------------------------------------------
 _start_lock_timeout_monitor() {
     local timeout="${1:-3600}"
-    local parent_pid="$$"
+    local parent_pid="$$"  # Save parent PID (changes after fork)
 
+    # Run in subshell (background process)
     (
-        sleep "$timeout"
+        sleep "$timeout"  # Wait for timeout period
 
         # Check if parent is still running
         if ps -p "$parent_pid" >/dev/null 2>&1; then
             df_log_error "TIMEOUT: Maintenance exceeded ${timeout}s limit, terminating PID $parent_pid"
+
+            # Stage 1: Graceful termination (SIGTERM)
             kill -TERM "$parent_pid" 2>/dev/null
 
-            # Grace period, then force kill
+            # Stage 2: Grace period, then force kill (SIGKILL)
             sleep 10
             if ps -p "$parent_pid" >/dev/null 2>&1; then
                 kill -KILL "$parent_pid" 2>/dev/null
@@ -141,18 +163,19 @@ _start_lock_timeout_monitor() {
 # _release_lock
 #
 # Releases lock and removes lockfile.
+# Called automatically via EXIT trap.
 #
 # Parameters:
-#   $1 - File descriptor number
+#   $1 - File descriptor number (default: 200)
 # Returns: None
 # ------------------------------------------------------------------------------
 _release_lock() {
     local lock_fd="${1:-200}"
 
-    # Close file descriptor (releases flock)
+    # Close file descriptor (releases flock automatically)
     eval "exec ${lock_fd}>&-"
 
-    # Remove lockfile
+    # Remove lockfile (|| true prevents error if already removed)
     rm -f "$WARTUNG_LOCKFILE" 2>/dev/null || true
 }
 
@@ -163,19 +186,23 @@ _release_lock() {
 #
 # Performs full APT maintenance cycle:
 #   1. Wait for APT lock release (up to 60s)
-#   2. Sync package lists
-#   3. Install updates (full-upgrade)
-#   4. Clean cache and old packages
+#   2. Sync package lists (apt update)
+#   3. Install updates (apt full-upgrade)
+#   4. Clean cache and old packages (autoremove, autoclean)
+#
+# Uses -qq for quiet output (errors only), -y for non-interactive.
+# Continues on individual step failures (error counting).
 #
 # Parameters: None
-# Returns: 0 success, >0 failure (error count)
+# Returns: 0 success, >0 failure count (number of failed steps)
 # ------------------------------------------------------------------------------
 _df_wartung_apt_common() {
     local retries=0
-    local max_retries=6
+    local max_retries=6  # 6 retries = 60s total wait
     local error_count=0
 
-    # Wait for APT locks
+    # Wait for APT locks (other apt/dpkg processes)
+    # fuser: Shows which process holds the file
     while fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || \
           fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
         if (( retries >= max_retries )); then
@@ -187,23 +214,25 @@ _df_wartung_apt_common() {
         ((retries++))
     done
 
-    # Sync package lists
+    # Step 1: Sync package lists from repositories
     df_log_info "APT: Syncing package lists..."
     if ! apt-get update -qq; then
         df_log_error "apt update failed"
         ((error_count++))
     fi
 
-    # Full upgrade
+    # Step 2: Install available updates (full-upgrade handles dependencies)
     df_log_info "APT: Installing updates (full-upgrade)..."
     if ! apt-get full-upgrade -y -qq; then
         df_log_error "apt upgrade failed"
         ((error_count++))
     fi
 
-    # Cleanup
+    # Step 3: Remove orphaned packages (dependencies no longer needed)
     df_log_info "APT: Cleaning cache and old packages..."
     apt-get autoremove -yqq || ((error_count++))
+
+    # Step 4: Remove downloaded .deb files from cache
     apt-get autoclean -yqq || ((error_count++))
 
     return "$error_count"
@@ -215,6 +244,7 @@ _df_wartung_apt_common() {
 # _df_wartung_zfs_scrub
 #
 # Starts ZFS scrub for all pools (background process).
+# Scrub: Data integrity check (checksums, finds silent corruption).
 # Skips pools with scrub already in progress.
 #
 # Parameters: None
@@ -222,26 +252,33 @@ _df_wartung_apt_common() {
 # ------------------------------------------------------------------------------
 _df_wartung_zfs_scrub() {
     local error_count=0
-    local -a pools
+    local -a pools  # Array of pool names
     local pool
 
+    # Check if ZFS tools are installed
     if ! command -v zpool >/dev/null 2>&1; then
         df_log_warn "ZFS tools not installed, skipping scrub"
         return 0
     fi
 
+    # Get list of ZFS pools (-H: No headers, -o name: Name only)
     mapfile -t pools < <(zpool list -H -o name 2>/dev/null)
 
+    # Skip if no pools found
     if [[ ${#pools[@]} -eq 0 ]]; then
         df_log_warn "No ZFS pools found, skipping scrub"
         return 0
     fi
 
+    # Start scrub for each pool
     for pool in "${pools[@]}"; do
+        # Check if scrub already running
         if zpool status "$pool" 2>/dev/null | grep -q "scrub in progress"; then
             df_log_warn "ZFS: Scrub for $pool already running"
         else
             df_log_info "ZFS: Starting integrity check (scrub) for $pool..."
+
+            # Start scrub (runs in background automatically)
             if zpool scrub "$pool" 2>/dev/null; then
                 df_log_success "Scrub for $pool started in background"
             else
@@ -260,17 +297,21 @@ _df_wartung_zfs_scrub() {
 # _df_wartung_proxmox
 #
 # Updates Proxmox Appliance Manager database.
-# Only runs on Proxmox VE hosts.
+# Only runs on Proxmox VE hosts (detects pveam command).
+# Appliances: Pre-configured LXC container templates.
 #
 # Parameters: None
 # Returns: 0 success, 1 failure
 # ------------------------------------------------------------------------------
 _df_wartung_proxmox() {
+    # Check if Proxmox tools are installed
     if ! command -v pveam >/dev/null 2>&1; then
         return 0  # Not a Proxmox host, skip silently
     fi
 
     df_log_info "Proxmox: Updating Appliance Manager..."
+
+    # Update appliance template list (pveam = Proxmox VE Appliance Manager)
     if pveam update 2>/dev/null; then
         df_log_success "Proxmox appliances updated"
         return 0
@@ -285,7 +326,7 @@ _df_wartung_proxmox() {
 # ------------------------------------------------------------------------------
 # _df_wartung_updatedb
 #
-# Updates locate database index.
+# Updates locate database index (file search database).
 # Quick mode: Background with low priority (ionice/nice)
 # Full mode: Foreground execution
 #
@@ -296,12 +337,14 @@ _df_wartung_proxmox() {
 _df_wartung_updatedb() {
     local mode="${1:-quick}"
 
+    # Check if locate/mlocate is installed
     if ! command -v updatedb >/dev/null 2>&1; then
         df_log_warn "updatedb not installed, skipping"
         return 0
     fi
 
     if [[ "$mode" == "--full" ]]; then
+        # Foreground execution (blocks until complete)
         df_log_info "System: Updating locate index (foreground)..."
         if updatedb 2>/dev/null; then
             df_log_success "Locate index updated"
@@ -310,11 +353,15 @@ _df_wartung_updatedb() {
             return 1
         fi
     else
+        # Background execution with low priority (doesn't block)
         df_log_info "System: Starting locate index update (background, low priority)..."
-        # ionice -c 3 = idle I/O, nice -n 19 = lowest CPU priority
+
+        # ionice -c 3: Idle I/O class (only when disk idle)
+        # nice -n 19: Lowest CPU priority (max niceness)
         if command -v ionice >/dev/null 2>&1; then
             nice -n 19 ionice -c 3 updatedb &
         else
+            # Fallback if ionice not available
             nice -n 19 updatedb &
         fi
         df_log_success "Locate index update started in background"
@@ -331,11 +378,15 @@ _df_wartung_updatedb() {
 # Main maintenance orchestrator with error aggregation:
 #   1. Acquire exclusive lock (prevent parallel runs)
 #   2. Validate environment (Linux, root)
-#   3. Run APT maintenance
+#   3. Run APT maintenance (always)
 #   4. Update Proxmox appliances (if applicable)
 #   5. Run ZFS scrub (full mode only)
 #   6. Update locate database
 #   7. Log results with error summary
+#
+# Error handling: Continues on individual failures, aggregates error count.
+# Lock protection: Ensures only one instance runs at a time.
+# Timeout protection: Terminates if execution exceeds configured timeout.
 #
 # Parameters:
 #   $1 - Mode: "quick" (default) or "--full"
@@ -358,38 +409,42 @@ df_wartung_run() {
     local duration
     local total_errors=0
 
+    # Record start time (Unix timestamp)
     start_time=$(date +%s)
 
+    # Print header with configuration info
     printf "\033[1m================================================\033[0m\n"
     df_log_info "System maintenance: $(hostname) [Mode: ${mode}]"
     df_log_info "Lock timeout: ${WARTUNG_LOCK_TIMEOUT}s | Max runtime: $((WARTUNG_LOCK_TIMEOUT/60))min"
     printf "\033[1m================================================\033[0m\n\n"
 
-    # 1. Acquire lock
+    # Step 1: Acquire exclusive lock (prevents parallel execution)
     _acquire_lock || return 1
 
-    # 2. Environment validation
+    # Step 2: Environment validation
     if [[ "$(uname -s)" != "Linux" ]]; then
         df_log_error "Linux only supported!"
         return 1
     fi
 
+    # Check for root privileges (required for apt/zfs/updatedb)
     if [[ $EUID -ne 0 ]]; then
         df_log_error "Root privileges required! (Use sudo)"
         return 1
     fi
 
-    # 3. APT maintenance (always)
+    # Step 3: APT maintenance (always runs)
     _df_wartung_apt_common
     local apt_errors=$?
     ((total_errors += apt_errors))
 
-    # 4. Proxmox maintenance (if applicable)
+    # Step 4: Proxmox maintenance (if applicable)
+    # Auto-detect Proxmox host by hostname pattern or /etc/pve directory
     if [[ "$HOSTNAME" == *proxmox* || "$HOSTNAME" == *pve* || -d /etc/pve ]]; then
         _df_wartung_proxmox || ((total_errors++))
     fi
 
-    # 5. ZFS scrub (full mode only)
+    # Step 5: ZFS scrub (full mode only - intensive operation)
     if [[ "$mode" == "--full" ]]; then
         _df_wartung_zfs_scrub
         local zfs_errors=$?
@@ -398,13 +453,14 @@ df_wartung_run() {
         df_log_info "ZFS: Skipping integrity check (quick mode)"
     fi
 
-    # 6. Locate database update
+    # Step 6: Locate database update
     _df_wartung_updatedb "$mode" || ((total_errors++))
 
-    # 7. Finalization & logging
+    # Step 7: Finalization & logging
     end_time=$(date +%s)
     duration=$((end_time - start_time))
 
+    # Print footer with summary
     printf "\n\033[1m================================================\033[0m\n"
     if [[ $total_errors -eq 0 ]]; then
         df_log_success "Maintenance completed successfully"
@@ -414,7 +470,7 @@ df_wartung_run() {
     df_log_info "Duration: ${duration}s | Timeout: ${WARTUNG_LOCK_TIMEOUT}s"
     printf "\033[1m================================================\033[0m\n"
 
-    # Write to log file
+    # Write to log file (CSV format for easy parsing)
     if [[ -d "$(dirname "$WARTUNG_LOGFILE")" ]]; then
         printf "%s | %s | Mode: %s | Duration: %ss | Timeout: %ss | Errors: %d\n" \
             "$(date '+%Y-%m-%d %H:%M:%S')" \
@@ -431,7 +487,11 @@ df_wartung_run() {
 # --- CONVENIENCE ALIASES ------------------------------------------------------
 
 # Quick mode (default) - for daily use
+# Minimal maintenance: APT updates, background locate update
+# Skips intensive operations (ZFS scrub)
 alias au='sudo bash -c "source ~/.bashwartung && df_wartung_run"'
 
 # Full mode - for monthly maintenance
+# Complete maintenance: APT updates, ZFS scrub, foreground locate update
+# Suitable for scheduled monthly cron jobs
 alias au-full='sudo bash -c "source ~/.bashwartung && df_wartung_run --full"'

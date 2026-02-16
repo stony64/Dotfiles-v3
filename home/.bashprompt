@@ -8,19 +8,30 @@
 # CHANGES:     v3.6.7 - Fix ANSI escape sequences with $'...' quoting
 # ------------------------------------------------------------------------------
 
-# ShellCheck configuration
+# ShellCheck configuration (ignore missing source file, allow unused variables)
 # shellcheck source=/dev/null disable=SC2034
 
 # --- IDEMPOTENCY GUARD --------------------------------------------------------
 # Prevents multiple loading and PROMPT_COMMAND duplication
+# Important: Without guard, PROMPT_COMMAND would grow on each reload
 [[ -n "${DF_BASHPROMPT_LOADED:-}" ]] && return 0
 readonly DF_BASHPROMPT_LOADED=1
 
 # --- COLOR DEFINITIONS --------------------------------------------------------
-# Pure ANSI colors for use in functions (printf/echo)
-# Uses $'...' ANSI-C quoting to properly interpret escape sequences
-# No \[ \] here - those are only for PS1 string itself
+# Two types of color variables for different use cases:
+#
+# 1. C_* (Command colors) - Pure ANSI colors for functions
+#    - Used in: df_prompt_git(), set_prompt_exit_code()
+#    - Uses: $'...' ANSI-C quoting (interprets \033 as escape)
+#    - No \[ \] wrapping (handled when output is used)
+#
+# 2. P_* (Prompt colors) - PS1-masked colors for static prompt parts
+#    - Used in: PS1 string construction only
+#    - Uses: $'...' + \[ \] wrapping (for proper line wrapping)
+#    - Critical: \[ \] tells bash these are zero-width (cursor positioning)
 
+# Command colors (for dynamic content from functions)
+# $'...' is ANSI-C quoting: interprets escape sequences like \033, \n, \t
 readonly C_RED=$'\033[31m'
 readonly C_GREEN=$'\033[32m'
 readonly C_BLUE=$'\033[34m'
@@ -29,15 +40,16 @@ readonly C_YELLOW=$'\033[33m'
 readonly C_MAGENTA=$'\033[35m'
 readonly C_RESET=$'\033[0m'
 
-# PS1-masked colors (with \[ \] for proper line wrapping)
-# These are for static parts of PS1 only
+# PS1-masked colors (for static prompt parts)
+# \[ \] tells bash these are non-printing characters (prevents line wrap issues)
+# Without \[ \]: Bash counts ANSI codes as visible characters → broken line editing
 readonly P_BLUE=$'\[\033[34m\]'
 readonly P_GREEN=$'\[\033[32m\]'
 readonly P_CYAN=$'\[\033[36m\]'
 readonly P_RED=$'\[\033[31m\]'
 readonly P_RESET=$'\[\033[0m\]'
 
-# Export C_* colors for use in other scripts
+# Export C_* colors for use in other scripts (bashaliases, bashfunctions)
 export C_RED C_GREEN C_BLUE C_CYAN C_YELLOW C_MAGENTA C_RESET
 
 # --- GIT STATUS FUNCTION ------------------------------------------------------
@@ -46,62 +58,95 @@ export C_RED C_GREEN C_BLUE C_CYAN C_YELLOW C_MAGENTA C_RESET
 # df_prompt_git
 #
 # Returns PS1-ready string for current Git repository status.
+# Called dynamically on each prompt render via \$(df_prompt_git) in PS1.
+# Output is NOT wrapped in \[ \] - PS1 handles that automatically.
 #
 # Components:
-#   - Branch name (yellow)
+#   - Branch name (yellow) - e.g., "main"
 #   - '*' indicator if working tree is dirty (yellow)
-#   - Remote tracking branch (cyan)
-#   - Ahead/behind counts (magenta +N/-N)
+#   - Remote tracking branch (cyan) - e.g., "origin"
+#   - Ahead/behind counts (magenta) - e.g., "+2-1"
+#
+# Example outputs:
+#   (main origin)           - Clean, tracking origin/main, up to date
+#   (main* origin)          - Dirty working tree
+#   (main origin+3)         - 3 commits ahead of origin/main
+#   (main origin-2)         - 2 commits behind origin/main
+#   (main origin+1-2)       - 1 ahead, 2 behind
+#   (detached-abc1234)      - Detached HEAD state
 #
 # Parameters: None
 # Returns: Formatted Git status string, empty if not in Git repo
 # ------------------------------------------------------------------------------
 df_prompt_git() {
-    # Check if inside Git repository
+    # Check if inside Git repository (returns 0 if true)
+    # Redirect stderr to suppress error messages
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        return 0
+        return 0  # Not in Git repo - return empty string
     fi
 
-    local branch
-    local dirty=""
-    local remote=""
-    local indicators=""
+    local branch        # Current branch name or short SHA
+    local dirty=""      # Dirty indicator (*) if uncommitted changes
+    local remote=""     # Remote tracking branch name
+    local indicators="" # Ahead/behind counts (+N-M)
 
-    # Get current branch or short SHA
+    # Get current branch name (symbolic-ref returns refs/heads/main)
+    # --short: Strip refs/heads/ prefix
     branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+    # Fallback for detached HEAD state (no branch)
     if [[ -z "$branch" ]]; then
+        # Show short commit SHA instead (first 7 chars)
         branch=$(git rev-parse --short HEAD 2>/dev/null)
     fi
+
+    # Bail out if still no result (broken repository)
     [[ -z "$branch" ]] && return 0
 
     # Check for uncommitted changes (dirty working tree)
+    # Two checks: unstaged changes (diff) and staged changes (diff --cached)
+    # --quiet: Exit with code 1 if differences found, 0 if clean
     if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
-        dirty="${C_YELLOW}*"
+        dirty="${C_YELLOW}*"  # Add yellow asterisk indicator
     fi
 
-    # Get upstream tracking information
+    # Get upstream tracking information (where this branch pushes/pulls from)
+    # @{u} = upstream tracking branch (e.g., refs/remotes/origin/main)
+    # --abbrev-ref: Short form (origin/main instead of refs/remotes/origin/main)
     local upstream
     upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null)
 
     if [[ -n "$upstream" ]]; then
-        # Extract remote name (before first /)
+        # Extract remote name (before first slash)
+        # ${upstream%%/*} removes everything after first /
+        # Example: "origin/main" → "origin"
         remote=" ${C_CYAN}${upstream%%/*}"
 
-        # Get ahead/behind counts
+        # Get ahead/behind counts relative to upstream
+        # --left-right: Show commits unique to each side
+        # --count: Show counts instead of commit list
+        # Format: "ahead\tbehind" (e.g., "2\t0" = 2 ahead, 0 behind)
         local counts
         local ahead
         local behind
 
         counts=$(git rev-list --left-right --count HEAD..."$upstream" 2>/dev/null)
         if [[ -n "$counts" ]]; then
+            # Split counts string into ahead/behind variables
+            # read: Reads words from stdin into variables
+            # -r: Don't interpret backslashes (raw mode)
+            # <<<: Here-string (feeds string to read's stdin)
             read -r ahead behind <<< "$counts"
+
+            # Add indicators if non-zero (${var:-0} defaults to 0 if empty)
             [[ ${ahead:-0} -gt 0 ]] && indicators+="${C_MAGENTA}+${ahead}"
             [[ ${behind:-0} -gt 0 ]] && indicators+="${C_MAGENTA}-${behind}"
         fi
     fi
 
     # Return formatted Git status
-    # Note: No \[ \] here - these are interpreted when PS1 is rendered
+    # printf instead of echo for consistent behavior across shells
+    # Note: No \[ \] here - C_* colors are raw ANSI, PS1 handles escaping
     printf ' %s(%s%s%s%s)%s' \
         "${C_RESET}" \
         "${C_YELLOW}${branch}" \
@@ -118,61 +163,106 @@ df_prompt_git() {
 #
 # Updates global EXIT_INDICATOR with last command's exit code.
 # Shows red colored exit code if non-zero, empty if zero.
-# Called automatically via PROMPT_COMMAND before each prompt.
+# Called automatically via PROMPT_COMMAND before each prompt render.
+#
+# Timing: Runs BEFORE PS1 is evaluated, so \${EXIT_INDICATOR} in PS1
+# always shows the correct exit code from the previous command.
+#
+# Why global variable?
+#   - PS1 is evaluated in subshell context (can't access function locals)
+#   - PROMPT_COMMAND runs in main shell (can set globals)
+#   - \${EXIT_INDICATOR} in PS1 expands the global variable
 #
 # Parameters: None
 # Returns: None
 # Side Effects: Sets global EXIT_INDICATOR variable
 # ------------------------------------------------------------------------------
 set_prompt_exit_code() {
+    # Capture exit code IMMEDIATELY (must be first line)
+    # $? contains exit code of last command
+    # Any command here would overwrite $?, so capture first
     local last_exit_code=$?
 
+    # Show exit code only if non-zero (command failed)
     if [[ $last_exit_code -ne 0 ]]; then
         EXIT_INDICATOR="${C_RED}${last_exit_code}${C_RESET} "
     else
+        # Success (exit 0) - hide exit code
         EXIT_INDICATOR=""
     fi
 }
 
 # --- PROMPT_COMMAND SETUP -----------------------------------------------------
 
-# Safely append to PROMPT_COMMAND without duplication
+# PROMPT_COMMAND: Bash special variable, executed before each PS1 render
+# Allows dynamic updates (exit codes, timestamps, etc.)
+#
+# Safe appending strategy:
+#   1. Check if already present (prevent duplication on reload)
+#   2. Prepend our function (runs BEFORE existing commands)
+#   3. Semicolon separator for multiple commands
+
 if [[ "${PROMPT_COMMAND:-}" != *"set_prompt_exit_code"* ]]; then
     if [[ -n "${PROMPT_COMMAND:-}" ]]; then
-        # Append with semicolon separator
+        # Append with semicolon separator (multiple commands)
+        # Prepend: Our function runs first, then existing PROMPT_COMMAND
         PROMPT_COMMAND="set_prompt_exit_code; ${PROMPT_COMMAND}"
     else
+        # No existing PROMPT_COMMAND - set directly
         PROMPT_COMMAND="set_prompt_exit_code"
     fi
 fi
-export PROMPT_COMMAND
+export PROMPT_COMMAND  # Make available to Subshells
 
 # --- PS1 CONSTRUCTION ---------------------------------------------------------
 
-# Format: [HH:MM:SS] user@host:path (git:branch*) [exit_code]
+# PS1 Format: [HH:MM:SS] user@host:path (git:branch*) [exit_code]
 # $
 #
-# Components:
-#   - [HH:MM:SS]     : Cyan brackets, blue time
-#   - user@host      : Red user, green host
-#   - :path          : Blue working directory
-#   - (git:branch*)  : Dynamic Git status (yellow branch, dirty indicator)
-#   - [exit_code]    : Red exit code if last command failed
-#   - $              : Prompt symbol ($ for user, # for root)
+# Components breakdown:
+#   [HH:MM:SS]     - Cyan brackets, blue time (updates each prompt)
+#   user@host      - Red user, green hostname (static)
+#   :path          - Blue working directory (updates on cd)
+#   (git:branch*)  - Yellow branch, dirty indicator (dynamic via df_prompt_git)
+#   [exit_code]    - Red exit code if failed (dynamic via EXIT_INDICATOR)
+#   $              - Prompt symbol ($ for user, # for root)
 #
-# Critical: \[ \] wraps all ANSI escape sequences for correct line wrapping
-# \$(df_prompt_git) is re-executed on each prompt render
-# \${EXIT_INDICATOR} expands dynamically from PROMPT_COMMAND
+# Quoting rules:
+#   - P_* colors: Pre-wrapped with \[ \] for static parts
+#   - \t, \u, \h, \w: Bash escape sequences (time, user, host, working dir)
+#   - \$(df_prompt_git): Escaped \$ = execute function on each render
+#   - \${EXIT_INDICATOR}: Escaped \$ = expand variable on each render
+#   - \n: Newline (prompt spans two lines)
+#   - \$: Literal $ for user, # for root (EUID check)
+#
+# Critical: All ANSI escape sequences MUST be wrapped in \[ \]
+# Otherwise: Bash counts ANSI codes as visible characters
+# Result: Line editing breaks (cursor position calculations wrong)
 
-PS1="${P_CYAN}[${P_BLUE}\t${P_CYAN}] "
-PS1+="${P_RED}\u${P_RESET}@${P_GREEN}\h${P_RESET}"
-PS1+=":${P_BLUE}\w"
+# Line 1: Timestamp, user, host, path
+PS1="${P_CYAN}[${P_BLUE}\t${P_CYAN}] "     # [HH:MM:SS] in cyan brackets
+PS1+="${P_RED}\u${P_RESET}@${P_GREEN}\h${P_RESET}"  # user@host (red@green)
+PS1+=":${P_BLUE}\w"                         # :path in blue
+
+# Git status (dynamic - re-executed on each prompt)
+# \$(...) with escaped \: Bash evaluates this on each PS1 render
+# Without \: Would execute once when PS1 is set, not on each prompt
 PS1+="\$(df_prompt_git)"
-PS1+="\n${P_RESET}\${EXIT_INDICATOR}\$ ${P_RESET}"
 
-export PS1
+# Line 2: Exit code indicator and prompt symbol
+PS1+="\n${P_RESET}"                         # Newline + reset colors
+PS1+="\${EXIT_INDICATOR}"                   # Exit code (if non-zero)
+PS1+="\$ ${P_RESET}"                        # $ for user, # for root
+
+export PS1  # Make available to Subshells
 
 # --- PS2 (CONTINUATION PROMPT) ------------------------------------------------
-# Used for multi-line commands
+# Used for multi-line commands (e.g., after typing "do" without "done")
+# Shows cyan arrow to indicate continuation of previous line
+#
+# Example:
+#   $ for i in 1 2 3; do
+#   →   echo $i
+#   → done
 PS2="${P_CYAN}→ ${P_RESET}"
 export PS2

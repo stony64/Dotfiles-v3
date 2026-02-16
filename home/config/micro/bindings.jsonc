@@ -1,77 +1,445 @@
 {
-    // --------------------------------------------------------------------------
-    // FILE:        home/.config/micro/bindings.json
-    // VERSION:     3.6.6
-    // DESCRIPTION: Micro Key Bindings (VSCode/Emacs Hybrid for Proxmox/Bash)
-    // AUTHOR:      Stony64
-    // --------------------------------------------------------------------------
-
-    // --- CLIPBOARD OPERATIONS -------------------------------------------------
-    "Ctrl-a": "SelectAll",
-    "Ctrl-c": "Copy",
-    "Ctrl-v": "Paste",
-    "Ctrl-x": "Cut",
-    "Ctrl-z": "Undo",
-    "CtrlShift-z": "Redo",
-    "Ctrl-y": "Redo",
-
-    // --- FILE OPERATIONS ------------------------------------------------------
-    "Ctrl-s": "Save",
-    "CtrlShift-s": "SaveAs",
-    "Ctrl-n": "TabSwitch",
-    "CtrlShift-n": "NewFile",
-    "Ctrl-o": "OpenFile",
-    "Ctrl-w": "Quit",
-    "Ctrl-q": "Quit",
-
-    // --- SEARCH/REPLACE (Terminal-safe) ---------------------------------------
-    "Ctrl-f": "Find",
-    "Ctrl-r": "Replace",
-    "F3": "FindNext",
-    "Shift-F3": "FindPrevious",
-    "CtrlShift-f": "ReplaceAll",
-
-    // --- MULTI-CURSOR (VSCode-style) ------------------------------------------
-    "Ctrl-d": "SpawnMultiCursor",
-    "CtrlAlt-Up": "SpawnMultiCursorUp",
-    "CtrlAlt-Down": "SpawnMultiCursorDown",
-
-    // --- LINE MANIPULATION ----------------------------------------------------
-    "Ctrl-l": "SelectLine",
-    "CtrlShift-d": "DuplicateLine",
-    "CtrlShift-k": "DeleteLine",
-    "Ctrl-j": "JoinLines",
-    "Alt-Up": "MoveLinesUp",
-    "Alt-Down": "MoveLinesDown",
-    "Ctrl-/": "lua:comment.comment",
-
-    // --- NAVIGATION -----------------------------------------------------------
-    "Ctrl-g": "command:goto",
-    "CtrlShift-p": "CommandMode",
-    "Ctrl-b": "JumpToMatchingBrace",
-
-    // --- FORMATTING/LINTING ---------------------------------------------------
-    "CtrlShift-i": "lua:format.format",
-    "F5": "lua:run.run",
-
-    // --- GIT INTEGRATION ------------------------------------------------------
-    "CtrlShift-g": "lua:git.status",
-
-    // --- PANES/SPLITS ---------------------------------------------------------
-    "Ctrl-e": "VSplitBuf",
-    "CtrlShift-e": "HSplitBuf",
-
-    // --- MACROS ---------------------------------------------------------------
-    "Ctrl-t": "ToggleMacro",
-
-    // --- TERMINAL -------------------------------------------------------------
-    "CtrlShift-x": "lua:shell.shell",
-
-    // --- VIEW/UI --------------------------------------------------------------
-    "F11": "ToggleRuler",
-    "F12": "ToggleLineNumbers",
-
-    // --- AUTOCOMPLETE ---------------------------------------------------------
-    "Tab": "IndentSelection,Autocomplete",
-    "CtrlSpace": "Autocomplete"
+  // --------------------------------------------------------------------------
+  // FILE:        home/.config/micro/bindings.json
+  // VERSION:     3.6.6
+  // DESCRIPTION: Micro Key Bindings (VSCode/Emacs Hybrid for Proxmox/Bash)
+  // AUTHOR:      Stony64
+  // --------------------------------------------------------------------------
+  // ==========================================================================
+  // MICRO EDITOR KEY BINDINGS
+  // ==========================================================================
+  // Micro is a modern terminal-based text editor (alternative to nano/vim)
+  // Homepage: https://micro-editor.github.io/
+  //
+  // Features:
+  //   - Mouse support (click, drag, scroll)
+  //   - Syntax highlighting (many languages)
+  //   - Multiple cursors (like VS Code)
+  //   - Plugin system (extend functionality)
+  //   - Modern keybindings (Ctrl+S, Ctrl+C/V)
+  //
+  // This config provides:
+  //   - VS Code-style shortcuts (Ctrl+S, Ctrl+D, Ctrl+/)
+  //   - Terminal-safe bindings (avoid Ctrl+Shift conflicts)
+  //   - Nano-like simplicity (easy to learn)
+  //   - Plugin integration (comment, format, git, shell)
+  //
+  // Location: ~/.config/micro/bindings.json
+  // Format: "Keybinding": "Action"
+  // Documentation: micro -config-dir, :help keybindings
+  //
+  // Terminal Limitations:
+  //   - Some Ctrl+Shift combinations may not work (terminal-dependent)
+  //   - Ctrl+S may freeze terminal (requires: stty -ixon in ~/.bashrc)
+  //   - Alt combinations may conflict with terminal shortcuts
+  //
+  // Plugin Requirements:
+  //   - comment plugin: Ctrl+/ commenting
+  //   - format plugin: Auto-formatting
+  //   - git plugin: Git integration
+  //   - shell plugin: Execute commands
+  //
+  // Install plugins:
+  //   micro -plugin install comment
+  //   micro -plugin install filemanager
+  //   micro -plugin install git
+  // ==========================================================================
+  // --- CLIPBOARD OPERATIONS -------------------------------------------------
+  // Standard clipboard shortcuts (like all modern editors)
+  // These override Micro's default keybindings for consistency
+  // "Ctrl-a": "SelectAll"
+  //   Select entire file content
+  //   Standard: VS Code, Sublime, Notepad++, all GUI editors
+  //   Micro default: Home (jump to line start)
+  //   Why override: Universal convention (Ctrl+A = Select All)
+  //   Usage: Select all → Ctrl+C (copy) → Paste elsewhere
+  "Ctrl-a": "SelectAll",
+  // "Ctrl-c": "Copy"
+  //   Copy selected text to clipboard
+  //   Standard: All modern editors
+  //   Micro default: Already Ctrl+C (no change)
+  //   Terminal note: May conflict with SIGINT (Ctrl+C = interrupt)
+  //     Works in Micro because editor intercepts keystroke before shell
+  //   Usage: Select text → Ctrl+C → Ctrl+V (paste)
+  "Ctrl-c": "Copy",
+  // "Ctrl-v": "Paste"
+  //   Paste clipboard content at cursor
+  //   Standard: All modern editors
+  //   Micro default: Already Ctrl+V (no change)
+  //   Terminal note: In shell, Ctrl+Shift+V pastes (Micro uses Ctrl+V)
+  //   Usage: Ctrl+C (copy) → Move cursor → Ctrl+V (paste)
+  "Ctrl-v": "Paste",
+  // "Ctrl-x": "Cut"
+  //   Cut selected text (copy + delete)
+  //   Standard: All modern editors
+  //   Micro default: Already Ctrl+X (no change)
+  //   Usage: Select text → Ctrl+X → Ctrl+V (move text)
+  "Ctrl-x": "Cut",
+  // "Ctrl-z": "Undo"
+  //   Undo last change
+  //   Standard: All modern editors
+  //   Micro default: Already Ctrl+Z (no change)
+  //   Undo stack: Typically 1000+ actions
+  //   Usage: Made mistake → Ctrl+Z (revert)
+  "Ctrl-z": "Undo",
+  // "CtrlShift-z": "Redo"
+  //   Redo previously undone change
+  //   Standard: VS Code, Sublime, IntelliJ
+  //   Micro default: Already Ctrl+Shift+Z
+  //   Alternative: Ctrl+Y (see below)
+  //   Usage: Undo too much → Ctrl+Shift+Z (redo)
+  "CtrlShift-z": "Redo",
+  // "Ctrl-y": "Redo"
+  //   Redo (alternative binding)
+  //   Standard: Windows convention (Notepad, Office, etc.)
+  //   Rationale: Easier than Ctrl+Shift+Z (one hand, no Shift)
+  //   Micro default: DeleteLine (overridden for convenience)
+  //   Trade-off: Lose DeleteLine on Ctrl+Y (use Ctrl+Shift+K instead)
+  //   Usage: Undo → Ctrl+Y (redo)
+  "Ctrl-y": "Redo",
+  // --- FILE OPERATIONS ------------------------------------------------------
+  // File management: Save, open, quit, new file
+  // "Ctrl-s": "Save"
+  //   Save current file
+  //   Standard: All modern editors
+  //   Micro default: Already Ctrl+S
+  //   Terminal requirement: stty -ixon in ~/.bashrc
+  //     Without: Ctrl+S freezes terminal (XON/XOFF flow control)
+  //     With: Ctrl+S free for Save
+  //   Usage: Edit file → Ctrl+S (save)
+  "Ctrl-s": "Save",
+  // "CtrlShift-s": "SaveAs"
+  //   Save file with new name
+  //   Standard: VS Code, Sublime, most GUI editors
+  //   Micro default: Not bound by default
+  //   Usage: Ctrl+Shift+S → Enter new filename → Save
+  //   Use case: Save backup, create variant
+  "CtrlShift-s": "SaveAs",
+  // "Ctrl-n": "TabSwitch"
+  //   Switch to next open tab (file)
+  //   Standard: VS Code uses Ctrl+Tab (not terminal-safe)
+  //   Micro default: Ctrl+N = NewFile (overridden)
+  //   Rationale: Ctrl+N more accessible than Ctrl+Tab in terminal
+  //   Usage: Multiple files open → Ctrl+N (cycle through)
+  //   Alternative: Ctrl+PgUp/PgDn (also switches tabs)
+  "Ctrl-n": "TabSwitch",
+  // "CtrlShift-n": "NewFile"
+  //   Create new file (tab)
+  //   Standard: Many editors (VS Code, Sublime)
+  //   Micro default: Ctrl+N (moved to Ctrl+Shift+N)
+  //   Rationale: Ctrl+N for TabSwitch more useful (frequent action)
+  //   Usage: Ctrl+Shift+N → New empty buffer → :save filename
+  "CtrlShift-n": "NewFile",
+  // "Ctrl-o": "OpenFile"
+  //   Open file dialog
+  //   Standard: Most editors
+  //   Micro default: Already Ctrl+O
+  //   Usage: Ctrl+O → Type filename or browse → Open
+  //   File browser: Arrow keys navigate, Enter opens
+  "Ctrl-o": "OpenFile",
+  // "Ctrl-w": "Quit"
+  //   Close current tab/file
+  //   Standard: VS Code, browsers (close tab)
+  //   Micro default: Not bound (adds binding)
+  //   Behavior: Prompts to save if unsaved changes
+  //   Usage: Done editing → Ctrl+W (close tab)
+  "Ctrl-w": "Quit",
+  // "Ctrl-q": "Quit"
+  //   Quit editor (all tabs)
+  //   Standard: Many applications
+  //   Micro default: Already Ctrl+Q
+  //   Behavior: Prompts to save unsaved files
+  //   Usage: Done working → Ctrl+Q (exit editor)
+  "Ctrl-q": "Quit",
+  // --- SEARCH/REPLACE (Terminal-safe) ---------------------------------------
+  // Find and replace functionality
+  // Note: Avoiding Ctrl+H (replace in many editors) - conflicts with Backspace
+  // "Ctrl-f": "Find"
+  //   Open find dialog (search in file)
+  //   Standard: All modern editors
+  //   Micro default: Already Ctrl+F
+  //   Features: Regex support, case sensitivity toggle
+  //   Usage: Ctrl+F → Type search term → Enter
+  //   Options: (r) regex, (C) case-sensitive, (w) whole word
+  "Ctrl-f": "Find",
+  // "Ctrl-r": "Replace"
+  //   Open find & replace dialog
+  //   Standard: Many editors (but some use Ctrl+H)
+  //   Micro default: Not bound by default
+  //   Rationale: Ctrl+R easier in terminal than Ctrl+H (Backspace conflict)
+  //   Usage: Ctrl+R → Search term → Replace term → (y)es/(n)o/(a)ll
+  //   Options: Same as Find (regex, case-sensitive, whole word)
+  "Ctrl-r": "Replace",
+  // "F3": "FindNext"
+  //   Jump to next search match
+  //   Standard: Many Windows applications (Office, Notepad++)
+  //   Micro default: Not bound (adds binding)
+  //   Requires: Previous search with Ctrl+F
+  //   Usage: Ctrl+F → Search → F3 (next) → F3 (next) → ...
+  //   Alternative: Ctrl+N after search (but conflicts with TabSwitch)
+  "F3": "FindNext",
+  // "Shift-F3": "FindPrevious"
+  //   Jump to previous search match
+  //   Standard: Many Windows applications
+  //   Micro default: Not bound (adds binding)
+  //   Usage: Ctrl+F → Search → F3 (next) → Shift+F3 (previous)
+  "Shift-F3": "FindPrevious",
+  // "CtrlShift-f": "ReplaceAll"
+  //   Replace all occurrences without prompting
+  //   Standard: VS Code (Ctrl+Shift+H = replace, but not terminal-safe)
+  //   Micro default: Not bound (adds binding)
+  //   Warning: No undo prompt - replaces ALL immediately
+  //   Usage: Ctrl+R → Search → Replace → Ctrl+Shift+F (all)
+  //   Use case: Rename variable, fix typo throughout file
+  "CtrlShift-f": "ReplaceAll",
+  // --- MULTI-CURSOR (VSCode-style) ------------------------------------------
+  // Multiple cursor editing (powerful feature)
+  // Inspired by VS Code, Sublime Text
+  // "Ctrl-d": "SpawnMultiCursor"
+  //   Add cursor at next occurrence of selected word
+  //   Standard: VS Code, Sublime Text
+  //   Micro default: Not bound (adds binding)
+  //   Behavior:
+  //     1. Select word (double-click or Ctrl+W)
+  //     2. Press Ctrl+D → Adds cursor at next occurrence
+  //     3. Press Ctrl+D again → Adds another cursor
+  //     4. Type → All cursors type simultaneously
+  //   Usage: Rename variable, edit similar lines
+  //   Example: Select "foo" → Ctrl+D → Ctrl+D → Type "bar" (replaces all "foo")
+  "Ctrl-d": "SpawnMultiCursor",
+  // "CtrlAlt-Up": "SpawnMultiCursorUp"
+  //   Add cursor on line above current position
+  //   Standard: VS Code (Ctrl+Alt+Up)
+  //   Micro default: Not bound (adds binding)
+  //   Usage: Click line → Ctrl+Alt+Up (add cursor above)
+  //   Use case: Edit column of data, indent multiple lines
+  //   Example:
+  //     Line 1: value
+  //     Line 2: value  ← Cursor here
+  //     Ctrl+Alt+Up → Two cursors → Type "#" → Comment both
+  "CtrlAlt-Up": "SpawnMultiCursorUp",
+  // "CtrlAlt-Down": "SpawnMultiCursorDown"
+  //   Add cursor on line below current position
+  //   Standard: VS Code (Ctrl+Alt+Down)
+  //   Micro default: Not bound (adds binding)
+  //   Usage: Click line → Ctrl+Alt+Down (add cursor below)
+  //   Use case: Same as Up (but downward direction)
+  "CtrlAlt-Down": "SpawnMultiCursorDown",
+  // --- LINE MANIPULATION ----------------------------------------------------
+  // Operations on entire lines or line ranges
+  // "Ctrl-l": "SelectLine"
+  //   Select entire line (including newline)
+  //   Standard: Many editors (VS Code uses Ctrl+L for expand selection)
+  //   Micro default: Ctrl+L = JumpLine (go to line number)
+  //   Rationale: SelectLine more useful (JumpLine available via Ctrl+G)
+  //   Usage: Ctrl+L → Ctrl+C (copy line) or Ctrl+X (cut line)
+  //   Alternative: Triple-click (selects line)
+  "Ctrl-l": "SelectLine",
+  // "CtrlShift-d": "DuplicateLine"
+  //   Duplicate current line (or selection)
+  //   Standard: VS Code, IntelliJ
+  //   Micro default: Not bound (adds binding)
+  //   Behavior:
+  //     - No selection: Duplicates current line below
+  //     - With selection: Duplicates selection below
+  //   Usage: Cursor on line → Ctrl+Shift+D (duplicate)
+  //   Use case: Create similar code, repeat configuration
+  "CtrlShift-d": "DuplicateLine",
+  // "CtrlShift-k": "DeleteLine"
+  //   Delete entire line
+  //   Standard: VS Code
+  //   Micro default: Ctrl+Y = DeleteLine (moved here)
+  //   Rationale: Ctrl+Y reassigned to Redo (Windows convention)
+  //   Usage: Ctrl+Shift+K (delete line without selection)
+  //   Alternative: Ctrl+L (select) → Ctrl+X (cut)
+  "CtrlShift-k": "DeleteLine",
+  // "Ctrl-j": "JoinLines"
+  //   Join current line with line below (remove newline)
+  //   Standard: IntelliJ, Vim (J)
+  //   Micro default: Not bound (adds binding)
+  //   Behavior: Merges two lines, adds space between
+  //   Example:
+  //     Line 1: Hello
+  //     Line 2: World
+  //     Ctrl+J → "Hello World" (one line)
+  //   Use case: Unwrap text, join split strings
+  "Ctrl-j": "JoinLines",
+  // "Alt-Up": "MoveLinesUp"
+  //   Move current line (or selection) up
+  //   Standard: VS Code, IntelliJ
+  //   Micro default: Not bound (adds binding)
+  //   Usage: Cursor on line → Alt+Up (move up)
+  //   Use case: Reorder code, move functions
+  "Alt-Up": "MoveLinesUp",
+  // "Alt-Down": "MoveLinesDown"
+  //   Move current line (or selection) down
+  //   Standard: VS Code, IntelliJ
+  //   Micro default: Not bound (adds binding)
+  //   Usage: Cursor on line → Alt+Down (move down)
+  "Alt-Down": "MoveLinesDown",
+  // "Ctrl-/": "lua:comment.comment"
+  //   Toggle line/block comment
+  //   Standard: VS Code, IntelliJ, Sublime
+  //   Micro default: Not bound (requires comment plugin)
+  //   Plugin: micro -plugin install comment
+  //   Behavior:
+  //     - No selection: Comment/uncomment current line
+  //     - With selection: Comment/uncomment block
+  //   Language-aware: Uses correct comment syntax (# for bash, // for JS)
+  //   Usage: Select lines → Ctrl+/ (toggle comment)
+  //   Use case: Disable code, add comments
+  "Ctrl-/": "lua:comment.comment",
+  // --- NAVIGATION -----------------------------------------------------------
+  // Navigate within file and editor
+  // "Ctrl-g": "command:goto"
+  //   Go to line number
+  //   Standard: Many editors (Emacs, Nano)
+  //   Micro default: Already Ctrl+G
+  //   Usage: Ctrl+G → Type line number → Enter
+  //   Use case: Jump to error line, navigate large files
+  //   Note: Replaces Ctrl+L (SelectLine) default behavior
+  "Ctrl-g": "command:goto",
+  // "CtrlShift-p": "CommandMode"
+  //   Open command palette (run editor commands)
+  //   Standard: VS Code (Ctrl+Shift+P)
+  //   Micro default: Already Ctrl+Shift+P
+  //   Commands: :save, :quit, :set option, :plugin install, etc.
+  //   Usage: Ctrl+Shift+P → Type command → Enter
+  //   Example: Ctrl+Shift+P → "set tabsize 2" → Enter
+  //   Tip: Autocomplete available (Tab to complete)
+  "CtrlShift-p": "CommandMode",
+  // "Ctrl-b": "JumpToMatchingBrace"
+  //   Jump between matching brackets/braces
+  //   Standard: Many editors
+  //   Micro default: Not bound (adds binding)
+  //   Matches: (), {}, [], <>, quotes
+  //   Usage: Cursor on { → Ctrl+B → Jump to matching }
+  //   Use case: Navigate code blocks, check brace balance
+  "Ctrl-b": "JumpToMatchingBrace",
+  // --- FORMATTING/LINTING ---------------------------------------------------
+  // Code formatting and execution
+  // "CtrlShift-i": "lua:format.format"
+  //   Auto-format current file
+  //   Standard: VS Code (Alt+Shift+F, but not terminal-safe)
+  //   Micro default: Not bound (requires format plugin)
+  //   Plugin: Uses external formatters (prettier, black, gofmt, etc.)
+  //   Configuration: Set formatter per language in settings.json
+  //   Usage: Ctrl+Shift+I (format entire file)
+  //   Use case: Clean up code, enforce style
+  //   Example formatters:
+  //     - Bash: shfmt
+  //     - Python: black
+  //     - JavaScript: prettier
+  //     - Go: gofmt
+  "CtrlShift-i": "lua:format.format",
+  // "F5": "lua:run.run"
+  //   Execute current file
+  //   Standard: Many IDEs (F5 = Run/Debug)
+  //   Micro default: Not bound (requires run plugin or custom binding)
+  //   Behavior: Runs file with appropriate interpreter
+  //   Example:
+  //     - .sh: bash file.sh
+  //     - .py: python file.py
+  //     - .js: node file.js
+  //   Usage: Edit script → F5 (run) → See output
+  //   Note: May require custom configuration per language
+  "F5": "lua:run.run",
+  // --- GIT INTEGRATION ------------------------------------------------------
+  // Git status and commands
+  // "CtrlShift-g": "lua:git.status"
+  //   Show git status (changed files)
+  //   Standard: VS Code (Ctrl+Shift+G = Git panel)
+  //   Micro default: Not bound (requires git plugin)
+  //   Plugin: micro -plugin install git
+  //   Features: Show modified files, stage changes, commit
+  //   Usage: Ctrl+Shift+G (show status)
+  //   Use case: Check changes, stage files, commit
+  //   Note: May require additional git commands via command palette
+  "CtrlShift-g": "lua:git.status",
+  // --- PANES/SPLITS ---------------------------------------------------------
+  // Split editor window for side-by-side editing
+  // "Ctrl-e": "VSplitBuf"
+  //   Split window vertically (side-by-side)
+  //   Standard: Tmux/Vim convention (Ctrl+B %)
+  //   Micro default: Not bound (adds binding)
+  //   Behavior: Opens same buffer in two panes
+  //   Usage: Ctrl+E → Edit different parts of same file
+  //   Navigation: Ctrl+W (cycle panes)
+  //   Use case: Compare sections, edit header & footer
+  "Ctrl-e": "VSplitBuf",
+  // "CtrlShift-e": "HSplitBuf"
+  //   Split window horizontally (top/bottom)
+  //   Standard: Tmux/Vim convention (Ctrl+B ")
+  //   Micro default: Not bound (adds binding)
+  //   Behavior: Opens same buffer in two panes (horizontal)
+  //   Usage: Ctrl+Shift+E → View top & bottom of file
+  //   Navigation: Ctrl+W (cycle panes)
+  "CtrlShift-e": "HSplitBuf",
+  // --- MACROS ---------------------------------------------------------------
+  // Record and replay keystroke sequences
+  // "Ctrl-t": "ToggleMacro"
+  //   Start/stop recording macro
+  //   Standard: Many editors (Vim uses q)
+  //   Micro default: Not bound (adds binding)
+  //   Usage:
+  //     1. Ctrl+T → Start recording
+  //     2. Perform actions (typing, navigation, etc.)
+  //     3. Ctrl+T → Stop recording
+  //     4. Replay: :runMacro (from command palette)
+  //   Use case: Repeat complex edits, batch transformations
+  //   Example: Format 100 lines identically
+  "Ctrl-t": "ToggleMacro",
+  // --- TERMINAL -------------------------------------------------------------
+  // Execute shell commands from editor
+  // "CtrlShift-x": "lua:shell.shell"
+  //   Execute shell command
+  //   Standard: Custom (VS Code uses Ctrl+`)
+  //   Micro default: Not bound (requires shell plugin or custom)
+  //   Plugin: May require external plugin
+  //   Behavior: Prompt for command → Execute → Show output
+  //   Usage: Ctrl+Shift+X → Type command → Enter
+  //   Example: Ctrl+Shift+X → "ls -la" → See directory listing
+  //   Use case: Quick shell access without leaving editor
+  "CtrlShift-x": "lua:shell.shell",
+  // --- VIEW/UI --------------------------------------------------------------
+  // Toggle UI elements
+  // "F11": "ToggleRuler"
+  //   Toggle column ruler (vertical line at column 80/120)
+  //   Standard: Custom (F11 = Fullscreen in many apps)
+  //   Micro default: Not bound (adds binding)
+  //   Ruler: Visual guide for line length (e.g., 80 chars)
+  //   Configuration: Set ruler column in settings.json
+  //   Usage: F11 (toggle ruler on/off)
+  //   Use case: Check line length compliance
+  "F11": "ToggleRuler",
+  // "F12": "ToggleLineNumbers"
+  //   Toggle line numbers in margin
+  //   Standard: Custom (F12 = Dev Tools in browsers)
+  //   Micro default: Not bound (adds binding)
+  //   Usage: F12 (show/hide line numbers)
+  //   Use case: More screen space when numbers not needed
+  //   Note: Line numbers usually on by default
+  "F12": "ToggleLineNumbers",
+  // --- AUTOCOMPLETE ---------------------------------------------------------
+  // Code completion and suggestions
+  // "Tab": "IndentSelection,Autocomplete"
+  //   Indent selected lines OR trigger autocomplete
+  //   Standard: Most editors
+  //   Micro default: Tab = IndentSelection
+  //   Behavior:
+  //     - Text selected: Indent by tabsize (4 spaces)
+  //     - No selection, typing word: Show autocomplete suggestions
+  //   Autocomplete sources:
+  //     - Buffer words (words in current file)
+  //     - Language keywords (if syntax highlighting enabled)
+  //   Usage: Type "fun" → Tab (show completions) → Select → Enter
+  "Tab": "IndentSelection,Autocomplete",
+  // "CtrlSpace": "Autocomplete"
+  //   Explicitly trigger autocomplete
+  //   Standard: IntelliJ, VS Code
+  //   Micro default: Not bound (adds binding)
+  //   Rationale: Tab may indent instead of autocomplete
+  //   Usage: Type partial word → Ctrl+Space (force autocomplete)
+  //   Use case: Trigger completion mid-word, resolve ambiguity
+  "CtrlSpace": "Autocomplete"
 }
