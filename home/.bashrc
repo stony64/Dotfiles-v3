@@ -16,6 +16,10 @@
 # Non-interactive shells (scripts, scp, rsync) skip initialization
 [[ $- != *i* ]] && return
 
+# --- SHELL ENVIRONMENT ------------------------------------------------------
+# Run Scripts in /opt/scripts
+export PATH="$PATH:/opt/scripts"
+
 # --- PROJECT ENVIRONMENT ------------------------------------------------------
 # Repository root directory (overridable via environment)
 export DF_REPO_ROOT="${DF_REPO_ROOT:-/opt/dotfiles}"
