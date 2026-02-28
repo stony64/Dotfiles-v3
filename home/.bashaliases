@@ -380,7 +380,7 @@ alias push-force='push_upstream --force'
 
 # pct: Proxmox Container Tool with logging
 # -logfile: Write command log to /tmp (useful for debugging)
-alias pct='pct -logfile /tmp/pct-${USER}.log'
+alias pct='/usr/sbin/pct -logfile /tmp/pct-${USER}.log'
 
 # qm: QEMU/KVM Manager with logging
 # -logfile: Write command log to /tmp
