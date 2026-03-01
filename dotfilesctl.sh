@@ -241,33 +241,48 @@ deploy_dotfiles() {
 # Copies configuration files for which symlinks must not be used.
 # ENHANCED: .nanorc + full ~/.config/ copy (hard overwrite)
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# deploy_extra_configs
+#
+# Copies configuration files for which symlinks must not be used.
+# FIXED: config/ in home/config/ subdirectory + dotglob + verbose logging
+# ------------------------------------------------------------------------------
 deploy_extra_configs() {
-    local cfg_src_dir="${DOTFILES_DIR}/config"
+    local home_dir="${DOTFILES_DIR}/home"
+    local cfg_src_dir="${home_dir}/config"  # ← NEUER PFAD!
 
     if [[ ! -d "${cfg_src_dir}" ]]; then
-        df_log_warn "No config/ directory found: ${cfg_src_dir}"
+        df_log_warn "No home/config/ directory: ${cfg_src_dir}"
+        df_log_info "Available: $(ls -la "${home_dir}/" 2>/dev/null | head -3)"
         return 0
     fi
 
-    # .nanorc first (independent)
-    if [[ -f "${cfg_src_dir}/nanorc" ]]; then
-        [[ -f "${HOME}/.nanorc" && ! -L "${HOME}/.nanorc" ]] && {
+    df_log_info "Found configs: ${cfg_src_dir} ($(ls -la "${cfg_src_dir}/" 2>/dev/null | wc -l) items)"
+
+    # .nanorc: Copy to ~ (nano compatibility)
+    local nanorc_src="${cfg_src_dir}/nanorc"
+    if [[ -f "${nanorc_src}" ]]; then
+        # Backup if regular file
+        if [[ -f "${HOME}/.nanorc" && ! -L "${HOME}/.nanorc" ]]; then
             mv "${HOME}/.nanorc" "${HOME}/.nanorc.bak_${TIMESTAMP}"
-            df_log_warn "Backed up .nanorc"
-        }
+            df_log_warn "Backed up .nanorc → .bak_${TIMESTAMP}"
+        fi
+        # Remove symlink
         [[ -L "${HOME}/.nanorc" ]] && command rm -f "${HOME}/.nanorc"
-        cp "${cfg_src_dir}/nanorc" "${HOME}/.nanorc"
-        df_log_success "Copied .nanorc"
+        cp "${nanorc_src}" "${HOME}/.nanorc"
+        df_log_success "Copied ${nanorc_src} → ~/.nanorc"
     fi
 
-    # Full config/ with dotglob (copies HIDDEN files!)
+    # Full home/config/ → ~/.config/ (with dotglob für .files!)
     mkdir -p "${HOME}/.config"
-    shopt -s dotglob nullglob
-    if [[ -n "$(ls -A "${cfg_src_dir}/")" ]]; then  # Nicht leer
-        cp -rf "${cfg_src_dir}/." "${HOME}/.config/"
-        df_log_success "Copied $(find "${cfg_src_dir}" | wc -l) items → ~/.config/"
+    shopt -s dotglob nullglob  # ← Versteckte Dateien!
+    if cp -rf "${cfg_src_dir}/." "${HOME}/.config/"; then
+        local copied_count
+        copied_count=$(find "${cfg_src_dir}" | wc -l)
+        df_log_success "Copied ${copied_count} items: home/config/ → ~/.config/"
     else
-        df_log_warn "config/ empty - skipped"
+        df_log_error "Copy failed: ${cfg_src_dir} → ~/.config/"
+        return 1
     fi
     shopt -u dotglob nullglob
 }
