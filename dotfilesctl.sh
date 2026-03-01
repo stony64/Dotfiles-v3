@@ -244,42 +244,32 @@ deploy_dotfiles() {
 deploy_extra_configs() {
     local cfg_src_dir="${DOTFILES_DIR}/config"
 
-    # .nanorc: Copy to ~ (not symlink - nano compatibility)
+    if [[ ! -d "${cfg_src_dir}" ]]; then
+        df_log_warn "No config/ directory found: ${cfg_src_dir}"
+        return 0
+    fi
+
+    # .nanorc first (independent)
     if [[ -f "${cfg_src_dir}/nanorc" ]]; then
-        # Backup existing .nanorc if regular file
-        if [[ -f "${HOME}/.nanorc" && ! -L "${HOME}/.nanorc" ]]; then
-            local backup="${HOME}/.nanorc.bak_${TIMESTAMP}"
-            mv "${HOME}/.nanorc" "${backup}"
-            df_log_warn "Backed up: .nanorc → $(basename "${backup}")"
-        fi
-        # Remove symlink if exists
+        [[ -f "${HOME}/.nanorc" && ! -L "${HOME}/.nanorc" ]] && {
+            mv "${HOME}/.nanorc" "${HOME}/.nanorc.bak_${TIMESTAMP}"
+            df_log_warn "Backed up .nanorc"
+        }
         [[ -L "${HOME}/.nanorc" ]] && command rm -f "${HOME}/.nanorc"
         cp "${cfg_src_dir}/nanorc" "${HOME}/.nanorc"
-        df_log_success "Copied .nanorc → ~/.nanorc"
+        df_log_success "Copied .nanorc"
     fi
 
-    # mc: ~/.config/mc/ini
-    if [[ -f "${cfg_src_dir}/mc/ini" ]]; then
-        mkdir -p "${HOME}/.config/mc"
-        cp "${cfg_src_dir}/mc/ini" "${HOME}/.config/mc/ini"
-        df_log_success "Copied mc config to ~/.config/mc/ini"
-    fi
-
-    # micro: ~/.config/micro/*
-    if [[ -d "${cfg_src_dir}/micro" ]]; then
-        mkdir -p "${HOME}/.config/micro"
-        # Force overwrite existing files
-        cp -rf "${cfg_src_dir}/micro/." "${HOME}/.config/micro/"
-        df_log_success "Copied micro config to ~/.config/micro/"
-    fi
-
-    # FULL ~/.config/ copy (all other configs - hard overwrite)
-    if [[ -d "${cfg_src_dir}" ]]; then
-        mkdir -p "${HOME}/.config"
-        # Backup existing .config if needed? → No, hard overwrite per preference
+    # Full config/ with dotglob (copies HIDDEN files!)
+    mkdir -p "${HOME}/.config"
+    shopt -s dotglob nullglob
+    if [[ -n "$(ls -A "${cfg_src_dir}/")" ]]; then  # Nicht leer
         cp -rf "${cfg_src_dir}/." "${HOME}/.config/"
-        df_log_success "Copied full config/ → ~/.config/ (hard overwrite)"
+        df_log_success "Copied $(find "${cfg_src_dir}" | wc -l) items → ~/.config/"
+    else
+        df_log_warn "config/ empty - skipped"
     fi
+    shopt -u dotglob nullglob
 }
 
 # ------------------------------------------------------------------------------
