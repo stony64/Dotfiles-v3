@@ -249,42 +249,33 @@ deploy_dotfiles() {
 # ------------------------------------------------------------------------------
 deploy_extra_configs() {
     local home_dir="${DOTFILES_DIR}/home"
-    local cfg_src_dir="${home_dir}/config"  # ← NEUER PFAD!
+    local cfg_src_dir="${home_dir}/config"
 
-    if [[ ! -d "${cfg_src_dir}" ]]; then
-        df_log_warn "No home/config/ directory: ${cfg_src_dir}"
-        df_log_info "Available: $(ls -la "${home_dir}/" 2>/dev/null | head -3)"
-        return 0
-    fi
-
-    df_log_info "Found configs: ${cfg_src_dir} ($(ls -la "${cfg_src_dir}/" 2>/dev/null | wc -l) items)"
-
-    # .nanorc: Copy to ~ (nano compatibility)
-    local nanorc_src="${cfg_src_dir}/nanorc"
+    # .nanorc: Priorität home/ (flach)
+    local nanorc_src="${home_dir}/.nanorc"
     if [[ -f "${nanorc_src}" ]]; then
-        # Backup if regular file
         if [[ -f "${HOME}/.nanorc" && ! -L "${HOME}/.nanorc" ]]; then
             mv "${HOME}/.nanorc" "${HOME}/.nanorc.bak_${TIMESTAMP}"
             df_log_warn "Backed up .nanorc → .bak_${TIMESTAMP}"
         fi
-        # Remove symlink
         [[ -L "${HOME}/.nanorc" ]] && command rm -f "${HOME}/.nanorc"
         cp "${nanorc_src}" "${HOME}/.nanorc"
         df_log_success "Copied ${nanorc_src} → ~/.nanorc"
+    else
+        df_log_warn ".nanorc missing in ${home_dir}/"
     fi
 
-    # Full home/config/ → ~/.config/ (with dotglob für .files!)
-    mkdir -p "${HOME}/.config"
-    shopt -s dotglob nullglob  # ← Versteckte Dateien!
-    if cp -rf "${cfg_src_dir}/." "${HOME}/.config/"; then
-        local copied_count
-        copied_count=$(find "${cfg_src_dir}" | wc -l)
-        df_log_success "Copied ${copied_count} items: home/config/ → ~/.config/"
+    # home/config/ → ~/.config/ (falls vorhanden)
+    if [[ -d "${cfg_src_dir}" ]]; then
+        df_log_info "Deploying configs from ${cfg_src_dir}"
+        mkdir -p "${HOME}/.config"
+        shopt -s dotglob nullglob
+        cp -rf "${cfg_src_dir}/." "${HOME}/.config/"
+        df_log_success "Copied home/config/ → ~/.config/"
+        shopt -u dotglob nullglob
     else
-        df_log_error "Copy failed: ${cfg_src_dir} → ~/.config/"
-        return 1
+        df_log_warn "No home/config/: ${cfg_src_dir}"
     fi
-    shopt -u dotglob nullglob
 }
 
 # ------------------------------------------------------------------------------
