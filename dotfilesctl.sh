@@ -228,6 +228,31 @@ deploy_dotfiles() {
 }
 
 # ------------------------------------------------------------------------------
+# deploy_extra_configs
+#
+# Copies configuration files for which symlinks must not be used.
+# ------------------------------------------------------------------------------
+deploy_extra_configs() {
+    local cfg_src_dir="${DOTFILES_DIR}/config"
+
+    # mc: ~/.config/mc/ini
+    if [[ -f "${cfg_src_dir}/mc/ini" ]]; then
+        mkdir -p "${HOME}/.config/mc"
+        cp "${cfg_src_dir}/mc/ini" "${HOME}/.config/mc/ini"
+        df_log_success "Copied mc config to ~/.config/mc/ini"
+    fi
+
+    # micro: ~/.config/micro/*
+    if [[ -d "${cfg_src_dir}/micro" ]]; then
+        mkdir -p "${HOME}/.config/micro"
+        # optionally back up or overwrite existing files – here: force overwrite
+        cp -r "${cfg_src_dir}/micro/." "${HOME}/.config/micro/"
+        df_log_success "Copied micro config to ~/.config/micro/"
+    fi
+}
+
+
+# ------------------------------------------------------------------------------
 # remove_links
 #
 # Removes all symlinks pointing to repository from $HOME.
@@ -403,6 +428,7 @@ case "${1:-help}" in
         # Deploy dotfiles
         printf '\n'
         deploy_dotfiles
+        deploy_extra_configs
         printf '\n'
         df_log_success "Done. Run: exec bash"
         ;;
@@ -417,6 +443,7 @@ case "${1:-help}" in
 
         # Deploy fresh symlinks
         deploy_dotfiles
+        deploy_extra_configs
         printf '\n'
         df_log_success "Done. Run: exec bash"
         ;;
